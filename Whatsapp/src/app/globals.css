@@ -276,7 +276,7 @@ a {
   overflow: auto;
   position: absolute;
   bottom: 0;
-  top: 197px;
+  top: 108px;
   right: 0;
   left: 0;
 }
@@ -327,6 +327,25 @@ a {
   color: rgb(74, 74, 74);
 }
 
+.userdate .unread-date {
+  color: #25D366;
+}
+
+.unread-badge {
+  background-color: #25D366;
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 600;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  margin-top: .3rem;
+  padding: 0 .3rem;
+}
+
 .message .arrow img {
   width: 1.5rem;
   position: absolute;
@@ -372,6 +391,7 @@ a {
 .pfp {
   background-color: rgb(223, 223, 223);
   min-width: 3.063rem;
+  width: 3.063rem;
   height: 3.063rem;
   align-items: center;
   display: flex;

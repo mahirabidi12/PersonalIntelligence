@@ -1,42 +1,338 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "./supabaseClient";
+import Auth from "./components/Auth";
+
+type Message = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+};
+
+type Contact = {
+  id: string;
+  name: string;
+  img: string;
+  nopic: boolean;
+  lastMessage: string;
+  date: string;
+};
+
+const ALL_CONTACTS: Contact[] = [
+  {
+    id: "user1",
+    name: "Saswata",
+    img: "/img/109316527.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Today",
+  },
+  {
+    id: "user2",
+    name: "Ananya",
+    img: "/img/girl-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Today",
+  },
+  {
+    id: "user3",
+    name: "Arjun Mehta",
+    img: "/img/arjun-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Yesterday",
+  },
+  {
+    id: "user4",
+    name: "Priya Sharma",
+    img: "/img/79feb1611dddcbce7910e0c1081df6e2.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Friday",
+  },
+  {
+    id: "user5",
+    name: "Vikram Patel",
+    img: "/img/e5wnacz2aaaa.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Thursday",
+  },
+  {
+    id: "user6",
+    name: "Neha Gupta",
+    img: "/img/neha-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Wednesday",
+  },
+  {
+    id: "user7",
+    name: "Amit Kumar",
+    img: "/img/amit-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Tuesday",
+  },
+  {
+    id: "user8",
+    name: "Rohan Singh",
+    img: "/img/rohan-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "Monday",
+  },
+  {
+    id: "user9",
+    name: "Kavita Reddy",
+    img: "/img/kavita-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "02/05",
+  },
+  {
+    id: "user10",
+    name: "Dev Team",
+    img: "/img/devteam-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "01/30",
+  },
+  {
+    id: "user11",
+    name: "Sanjay Iyer",
+    img: "/img/sanjay-profile.jpg",
+    nopic: false,
+    lastMessage: "",
+    date: "01/28",
+  },
+];
+
+function getConversationId(userId: string, contactId: string) {
+  const sorted = [userId, contactId].sort();
+  return `${sorted[0]}-${sorted[1]}-chat`;
+}
+
 export default function Home() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [readChats, setReadChats] = useState<Record<string, boolean>>({});
+
+  // Filter out the logged-in user from the contacts list
+  const contacts = ALL_CONTACTS.filter((c) => c.id !== userId);
+
+  // Auto-select first contact when userId changes
+  const effectiveSelectedId = selectedContactId && contacts.some((c) => c.id === selectedContactId)
+    ? selectedContactId
+    : contacts[0]?.id ?? null;
+
+  const conversationId = userId && effectiveSelectedId
+    ? getConversationId(userId, effectiveSelectedId)
+    : "";
+
+  const selectedContact = contacts.find((c) => c.id === effectiveSelectedId);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("chatUserId");
+    if (stored) setUserId(stored);
+    setHydrated(true);
+  }, []);
+
+  const formattedMessages = useMemo(
+    () =>
+      messages.map((m) => ({
+        ...m,
+        time: new Date(m.created_at).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      })),
+    [messages]
+  );
+
+  // Fetch last message preview and unread counts for each contact
+  const fetchLastMessages = useCallback(async () => {
+    if (!userId) return;
+    const previews: Record<string, string> = {};
+    const unreads: Record<string, number> = {};
+    for (const contact of ALL_CONTACTS.filter((c) => c.id !== userId)) {
+      const convId = getConversationId(userId, contact.id);
+      // Fetch recent messages (last 50) to count trailing received
+      const { data } = await supabase
+        .from("chats")
+        .select("sender_id,content")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (data && data.length > 0) {
+        previews[contact.id] = data[0].content;
+        // Count consecutive messages from the contact (trailing received)
+        let count = 0;
+        for (const msg of data) {
+          if (msg.sender_id !== userId) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        if (count > 0) {
+          unreads[contact.id] = count;
+        }
+      }
+    }
+    setLastMessages(previews);
+    setUnreadCounts(unreads);
+  }, [userId]);
+
+  // Poll for messages in the selected conversation
+  useEffect(() => {
+    if (!userId || !conversationId) return;
+
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Error loading messages:", error);
+        return;
+      }
+
+      if (data) {
+        setMessages((prev) => {
+          const dbIds = new Set(data.map((m: Message) => m.id));
+          const optimistic = prev.filter(
+            (m) => m.id.startsWith("temp-") && !dbIds.has(m.id)
+          );
+          return [...(data as Message[]), ...optimistic];
+        });
+      }
+    };
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 2000);
+
+    return () => clearInterval(interval);
+  }, [userId, conversationId]);
+
+  // Fetch last message previews and unread counts on same 2s cycle
+  useEffect(() => {
+    if (!userId) return;
+    fetchLastMessages();
+    const interval = setInterval(fetchLastMessages, 2000);
+    return () => clearInterval(interval);
+  }, [userId, fetchLastMessages]);
+
+  const handleSend = async () => {
+    if (!userId) return;
+    const content = newMessage.trim();
+    if (!content) return;
+
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      conversation_id: conversationId,
+      sender_id: userId,
+      content,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setNewMessage("");
+
+    const { data, error } = await supabase
+      .from("chats")
+      .insert({
+        conversation_id: conversationId,
+        sender_id: userId,
+        content,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error sending message:", error);
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setNewMessage(content);
+      return;
+    }
+
+    if (data) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === optimisticId ? (data as Message) : m))
+      );
+      if (effectiveSelectedId) {
+        setLastMessages((prev) => ({ ...prev, [effectiveSelectedId]: content }));
+      }
+    }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("chatUserId");
+    setUserId(null);
+    setMessages([]);
+  };
+
+  const handleSelectContact = (contactId: string) => {
+    setSelectedContactId(contactId);
+    setMessages([]);
+    setNewMessage("");
+    setReadChats((prev) => ({ ...prev, [contactId]: true }));
+  };
+
+  if (!hydrated) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#111b21" }} />
+    );
+  }
+
+  if (!userId) {
+    return <Auth onSelect={(id) => { localStorage.setItem("chatUserId", id); setUserId(id); }} />;
+  }
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <div className="container">
       <div className="whatsapp">
         <div className="contacts">
           <div className="connav navs">
-            <div className="profile">
-              <img src="/img/109316527.jpg" alt="" />
+            <div className="profile" title={userId}>
+              <img src={userId === "user1" ? "/img/109316527.jpg" : "/img/e5wnacz2aaaa.jpg"} alt="" />
             </div>
             <div className="tools">
-              <div className="tool">
+              <div className="tool" title="People">
                 <img src="/img/icons8-people-64.png" alt="" />
               </div>
-              <div className="tool">
+              <div className="tool" title="Status">
                 <img src="/img/icons8-loading-50.png" alt="" />
               </div>
-              <div className="tool">
+              <div className="tool" title="New Chat">
                 <img src="/img/icons8-typing-96.png" alt="" />
               </div>
-              <div className="tool">
+              <div
+                className="tool"
+                onClick={handleSignOut}
+                style={{ cursor: "pointer" }}
+                title="Sign Out"
+              >
                 <img src="/img/icons8-menu-vertical-50.png" alt="" />
               </div>
-            </div>
-          </div>
-          <div className="window blue">
-            <div className="winicon">
-              <img src="/img/icons8-notification-off-96.png" alt="" />
-            </div>
-            <div className="wininfo">
-              <div>
-                <p>Être averti·e en cas de nouveaux messages</p>
-              </div>
-              <div>
-                <p>Activer les notifications sur le bureau</p>
-                <img src="/img/icons8-arrow-96.png" alt="" />
-              </div>
-            </div>
-            <div className="winclose">
-              <img src="/img/icons8-close-90.png" alt="" />
             </div>
           </div>
           <div className="search">
@@ -45,354 +341,52 @@ export default function Home() {
               <img src="/img/icons8-back-96.png" alt="" />
               <input
                 type="text"
-                placeholder="Rechercher ou démarrer une nouvelle discussion"
+                placeholder="Search Chat"
               />
             </div>
             <img src="/img/icons8-grip-lines-96.png" alt="" />
           </div>
           <div className="usersContainer">
             <div className="users">
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Raskolnikov</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img
-                          src="/img/icons8-double-tick-96 (1).png"
-                          alt=""
-                        />
+              {contacts.map((contact) => {
+                const preview = lastMessages[contact.id] || contact.lastMessage || "Start a conversation";
+                const unread = readChats[contact.id] ? 0 : (unreadCounts[contact.id] || 0);
+                return (
+                  <div
+                    className={`user${effectiveSelectedId === contact.id ? " selected" : ""}`}
+                    key={contact.id}
+                    onClick={() => handleSelectContact(contact.id)}
+                  >
+                    <div className={`pfp${contact.nopic ? " nopic" : ""}`}>
+                      <img src={contact.img} alt="" />
+                    </div>
+                    <div className="userinfo">
+                      <div className="name">
+                        <p>{contact.name}</p>
                       </div>
-                      <p>
-                        We’re always thinking of eternity as an idea that
-                        cannot be understood, something immense. But why must
-                        it be? What if, instead of all this, you suddenly find
-                        just a little room there, something like a village
-                        bath-house, grimy, and spiders in every corner, and
-                        that’s all eternity is. Sometimes, you know, I can’t
-                        help feeling that that’s what it is.
-                      </p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
+                      <div className="message">
+                        <div className="meicon">
+                          <p>{preview}</p>
+                          <div className="arrow">
+                            <img src="/img/icons8-expand-arrow-96.png" alt="" />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>hier</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp">
-                  <img src="/img/79feb1611dddcbce7910e0c1081df6e2.jpg" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Just a normal man</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-missed-call-96.png" alt="" />
-                      </div>
-                      <p>Appel vocal manqué</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
+                    <div className="userdate">
+                      <p className={unread > 0 ? "unread-date" : ""}>{contact.date}</p>
+                      {unread > 0 ? (
+                        <span className="unread-badge">{unread}</span>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-                <div className="userdate">
-                  <p>vendredi</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp">
-                  <img src="/img/e5wnacz2aaaa.jpg" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Meindert Titus</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-double-tick-96.png" alt="" />
-                      </div>
-                      <p>
-                        https://www.youtube.com/watch?v=ZlNSujFRkgc, that's the
-                        video that I told you about
-                      </p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/06</p>
-                </div>
-              </div>
-              <div className="user selected">
-                <div className="pfp">
-                  <img
-                    src="/img/tumblr_ovlq7qnBBR1uebi0uo1_1280.jpg"
-                    alt=""
-                  />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Ihsan</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-double-tick-96.png" alt="" />
-                      </div>
-                      <p>Thank you.</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/03</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Ludovic Barthélémy</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <p>
-                        <b>
-                          I say let the world go to hell, but I should always
-                          have my tea.
-                        </b>
-                      </p>
-                      <div className="righticon">
-                        <img src="/img/icons8-mute-52.png" alt="" />
-                        <p>1</p>
-                      </div>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/08/22</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Meindert Titus</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-wall-clock-96.png" alt="" />
-                        <img
-                          src="/img/icons8-video-call-100 (1).png"
-                          alt=""
-                        />
-                      </div>
-                      <p>Vidéo</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/06</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Raskolnikov</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <p>
-                        We’re always thinking of eternity as an idea that cannot
-                        be understood, something immense. But why must it be?
-                        What if, instead of all this, you suddenly find just a
-                        little room there, something like a village bath-house,
-                        grimy, and spiders in every corner, and that’s all
-                        eternity is. Sometimes, you know, I can’t help feeling
-                        that that’s what it is.
-                      </p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>hier</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp">
-                  <img src="/img/79feb1611dddcbce7910e0c1081df6e2.jpg" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Just a normal man</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-missed-call-96.png" alt="" />
-                      </div>
-                      <p>Appel vocal manqué</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>vendredi</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp">
-                  <img src="/img/e5wnacz2aaaa.jpg" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Meindert Titus</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-double-tick-96.png" alt="" />
-                      </div>
-                      <p>
-                        https://www.youtube.com/watch?v=ZlNSujFRkgc, that's the
-                        video that I told you about
-                      </p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/06</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp">
-                  <img
-                    src="/img/tumblr_ovlq7qnBBR1uebi0uo1_1280.jpg"
-                    alt=""
-                  />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Ihsan</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-double-tick-96.png" alt="" />
-                      </div>
-                      <p>Thank you.</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/03</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Ludovic Barthélémy</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <p>
-                        <b>
-                          I say let the world go to hell, but I should always
-                          have my tea.
-                        </b>
-                      </p>
-                      <div className="righticon">
-                        <img src="/img/icons8-mute-52.png" alt="" />
-                        <p>1</p>
-                      </div>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/08/22</p>
-                </div>
-              </div>
-              <div className="user">
-                <div className="pfp nopic">
-                  <img src="/img/icons8-account-96.png" alt="" />
-                </div>
-                <div className="userinfo">
-                  <div className="name">
-                    <p>Meindert Titus</p>
-                  </div>
-                  <div className="message">
-                    <div className="meicon">
-                      <div>
-                        <img src="/img/icons8-wall-clock-96.png" alt="" />
-                        <img
-                          src="/img/icons8-video-call-100 (1).png"
-                          alt=""
-                        />
-                      </div>
-                      <p>Vidéo</p>
-                      <div className="arrow">
-                        <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="userdate">
-                  <p>2022/11/06</p>
-                </div>
-              </div>
+                );
+              })}
             </div>
             <div className="bottomcon">
               <p>
-                Vos messages personnels sont{" "}
-                <a href="#">chiffrés de bout en bout</a>
+                Your personal messages are{" "}
+                <a href="#">end-to-end encrypted</a>
               </p>
             </div>
           </div>
@@ -402,13 +396,13 @@ export default function Home() {
             <div className="conveuser">
               <div className="profile">
                 <img
-                  src="/img/tumblr_ovlq7qnBBR1uebi0uo1_1280.jpg"
+                  src={selectedContact?.img ?? "/img/icons8-account-96.png"}
                   alt=""
                 />
               </div>
               <div className="profileInformation">
-                <h4>Ihsan</h4>
-                <p>en ligne hier à 10:56 AM</p>
+                <h4>{selectedContact?.name ?? ""}</h4>
+                <p>online</p>
               </div>
             </div>
             <div className="tools">
@@ -421,162 +415,56 @@ export default function Home() {
             </div>
           </div>
           <div className="convemessages">
-            <div className="dateofm middle">
-              <p>2022/11/03</p>
-            </div>
-            <div className="middle">
-              <p>
-                <img
-                  src="/img/missed-video-call_118917.png"
-                  alt=""
-                />{" "}
-                Appel vocal manqué à 12:24 PM
-              </p>
-            </div>
-            <div className="senderContainer arrowm">
-              <div className="sender mepop">
-                <div className="thereply">
-                  <p>
-                    Lorem ipsum dolor sit amet, consectetur adipisicing elit.
-                    Quis suscipit deserunt ipsa quisquam alias rerum
-                    voluptatibus doloribus iste, illo, ut omnis voluptates
-                    numquam quo eius, dolores molestiae! In repellendus placeat
-                    commodi aspernatur quis! Exercitationem, eaque facilis
-                    provident minima itaque similique.
-                  </p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                  </div>
-                  <div className="arrowhover arrowG">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react rightr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
+            {formattedMessages.length === 0 ? (
+              <div className="middle">
+                <p>No messages yet. Send one!</p>
               </div>
-              <div className="sender mepop">
-                <div className="thereply">
-                  <p>
-                    Lorem ipsum dolor sit amet, consectetur adipisicing elit.
-                    Quis suscipit deserunt ipsa quisquam alias rerum
-                    voluptatibus doloribus iste, illo, ut omnis voluptates
-                    numquam quo eius, dolores molestiae! In repellendus placeat
-                    commodi aspernatur quis! Exercitationem, eaque facilis
-                    provident minima itaque similique.
-                  </p>
-                  <div className="time">
-                    <p>4:20 PM</p>
+            ) : (
+              formattedMessages.map((message) =>
+                message.sender_id === userId ? (
+                  <div
+                    className="senderContainer arrowm"
+                    key={message.id}
+                  >
+                    <div className="sender mepop">
+                      <div className="thereply">
+                        <p>{message.content}</p>
+                        <div className="time">
+                          <p>{message.time}</p>
+                          <img src="/img/icons8-double-tick-96.png" alt="" />
+                        </div>
+                        <div className="arrowhover arrowG">
+                          <img src="/img/icons8-expand-arrow-96.png" alt="" />
+                        </div>
+                        <div className="react rightr">
+                          <img src="/img/icons8-happy-96.png" alt="" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="arrowhover arrowG">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
+                ) : (
+                  <div
+                    className="receiverContainer arrowm"
+                    key={message.id}
+                  >
+                    <div className="reciver mepop">
+                      <div className="thereply">
+                        <p>{message.content}</p>
+                        <div className="time">
+                          <p>{message.time}</p>
+                        </div>
+                        <div className="arrowhover arrowW">
+                          <img src="/img/icons8-expand-arrow-96.png" alt="" />
+                        </div>
+                        <div className="react leftr">
+                          <img src="/img/icons8-happy-96.png" alt="" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="react rightr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="receiverContainer arrowm">
-              <div className="reciver mepop">
-                <div className="thereply">
-                  <p>Hey</p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                  </div>
-                  <div className="emoji">
-                    <img
-                      src="/img/1000522-new-thinking-emoji-free-icon-hq.png"
-                      alt=""
-                    />
-                  </div>
-                  <div className="arrowhover arrowW">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react leftr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="senderContainer arrowm">
-              <div className="sender mepop">
-                <div className="thereply">
-                  <p>Hello</p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                    <img src="/img/icons8-double-tick-96.png" alt="" />
-                  </div>
-                  <div className="arrowhover arrowG">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react rightr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="receiverContainer arrowm">
-              <div className="reciver mepop">
-                <div className="thereply">
-                  <p>
-                    Lorem ipsum dolor sit amet, consectetur adipisicing elit.
-                    Quis suscipit deserunt ipsa quisquam alias rerum
-                    voluptatibus doloribus iste, illo, ut omnis voluptates
-                    numquam quo eius, dolores molestiae! In repellendus placeat
-                    commodi aspernatur quis! Exercitationem, eaque facilis
-                    provident minima itaque similique.
-                  </p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                  </div>
-                  <div className="arrowhover arrowW">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react leftr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-              <div className="reciver mepop">
-                <div className="thereply">
-                  <p>
-                    Lorem ipsum dolor sit amet, consectetur adipisicing elit.
-                    Quis suscipit deserunt ipsa quisquam alias rerum
-                    voluptatibus doloribus iste, illo, ut omnis voluptates
-                    numquam quo eius, dolores molestiae! In repellendus placeat
-                    commodi aspernatur quis! Exercitationem, eaque facilis
-                    provident minima itaque similique.
-                  </p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                  </div>
-                  <div className="arrowhover arrowW">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react leftr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="senderContainer arrowm">
-              <div className="sender mepop">
-                <div className="thereply">
-                  <p>Thank you.</p>
-                  <div className="time">
-                    <p>4:20 PM</p>
-                    <img src="/img/icons8-double-tick-96.png" alt="" />
-                  </div>
-                  <div className="arrowhover arrowG">
-                    <img src="/img/icons8-expand-arrow-96.png" alt="" />
-                  </div>
-                  <div className="react rightr">
-                    <img src="/img/icons8-happy-96.png" alt="" />
-                  </div>
-                </div>
-              </div>
-            </div>
+                )
+              )
+            )}
           </div>
           <div className="convebottom">
             <div className="tools">
@@ -587,8 +475,14 @@ export default function Home() {
                 <img src="/img/icons8-attach-100.png" alt="" />
               </div>
             </div>
-            <input type="text" placeholder="Taper un message" />
-            <div className="tool">
+            <input
+              type="text"
+              placeholder="Type a message"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <div className="tool" onClick={handleSend}>
               <img src="/img/icons8-microphone-96.png" alt="" />
             </div>
           </div>
