@@ -32,6 +32,7 @@ class WhatsAppAgent(BaseAgent):
         self.intent_detector = intent_detector
         self.llm = ChatOpenAI(model=config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
         self._running = False
+        self._ordering = False
         self._pending_notifications: list[str] = []
 
         # Supabase client for direct DB access
@@ -50,6 +51,7 @@ class WhatsAppAgent(BaseAgent):
 
     async def _on_order_completed(self, payload: dict):
         """Queue a confirmation message to send in WhatsApp."""
+        self._ordering = False
         item = payload.get("item", "your order")
         self._pending_notifications.append(
             f"ordered it baby! your {item} is on its way 🎉"
@@ -58,6 +60,7 @@ class WhatsAppAgent(BaseAgent):
 
     async def _on_order_failed(self, payload: dict):
         """Queue a failure message to send in WhatsApp."""
+        self._ordering = False
         item = payload.get("item", "that")
         error = payload.get("error", "something went wrong")
         self._pending_notifications.append(
@@ -145,7 +148,8 @@ class WhatsAppAgent(BaseAgent):
                 await self._send_message(reply_text)
                 await self.memory.save_message("agent", reply_text, config.WHATSAPP_AGENT_USER)
 
-            if intent_result.intent == "order_food" and intent_result.item:
+            if intent_result.intent == "order_food" and intent_result.item and not self._ordering:
+                self._ordering = True
                 await self.event_bus.publish("ORDER_REQUESTED", {"item": intent_result.item})
                 logger.info(f"[WhatsAppAgent] Published ORDER_REQUESTED for: {intent_result.item}")
         else:
@@ -187,8 +191,9 @@ class WhatsAppAgent(BaseAgent):
                         await self._send_message(reply_text)
                         await self.memory.save_message("agent", reply_text, config.WHATSAPP_AGENT_USER)
 
-                    # If food intent, publish order event
-                    if intent_result.intent == "order_food" and intent_result.item:
+                    # If food intent and no order already running, publish order event
+                    if intent_result.intent == "order_food" and intent_result.item and not self._ordering:
+                        self._ordering = True
                         await self.event_bus.publish("ORDER_REQUESTED", {"item": intent_result.item})
                         logger.info(f"[WhatsAppAgent] Published ORDER_REQUESTED for: {intent_result.item}")
 

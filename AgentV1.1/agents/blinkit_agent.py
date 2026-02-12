@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 
+from openai import AsyncOpenAI
 from browser_use import Agent, BrowserSession
 from browser_use.llm.models import ChatOpenAI
 
@@ -25,6 +26,7 @@ class BlinkItAgent(BaseAgent):
         super().__init__("BlinkItAgent", browser_session, event_bus, memory)
         self.intent_detector = intent_detector
         self.llm = ChatOpenAI(model=config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
+        self.openai_client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
     async def setup(self):
         """Navigate to BlinkeyIt and login if needed."""
@@ -49,8 +51,17 @@ class BlinkItAgent(BaseAgent):
             # Step 3: Extract available options
             options = await self._extract_options()
 
+            # Fallback: if no results, ask LLM for a specific product name and retry once
             if not options:
-                logger.warning(f"[BlinkItAgent] No options found for: {item}")
+                logger.warning(f"[BlinkItAgent] No results for '{item}', trying fallback search...")
+                fallback_term = await self._get_fallback_search_term(item)
+                if fallback_term and fallback_term.lower() != item.lower():
+                    logger.info(f"[BlinkItAgent] Fallback: retrying with '{fallback_term}'")
+                    await self._search_item(fallback_term)
+                    options = await self._extract_options()
+
+            if not options:
+                logger.warning(f"[BlinkItAgent] No options found for: {item} (even after fallback)")
                 await self.event_bus.publish("ORDER_FAILED", {"item": item, "error": "No products found"})
                 return
 
@@ -62,10 +73,13 @@ class BlinkItAgent(BaseAgent):
             logger.info(f"[BlinkItAgent] Chose: {chosen_name} (index {chosen_index})")
             await self.log("decision", json.dumps(options), json.dumps(decision))
 
-            # Step 5: Add to cart and checkout
-            await self._add_to_cart_and_checkout(chosen_name)
+            # Step 5: Add to cart (stay on same page)
+            await self._add_to_cart(chosen_name)
 
-            # Step 6: Publish success
+            # Step 6: Open cart and checkout
+            await self._checkout()
+
+            # Step 7: Publish success
             await self.event_bus.publish("ORDER_COMPLETED", {
                 "item": item,
                 "chosen": chosen_name,
@@ -77,16 +91,8 @@ class BlinkItAgent(BaseAgent):
         except Exception as e:
             logger.error(f"[BlinkItAgent] Order failed for {item}: {e}")
             await self.log("order_failed", item, str(e), status="error")
-
-            # Retry once
-            try:
-                logger.info(f"[BlinkItAgent] Retrying order for: {item}")
-                await self._add_to_cart_and_checkout(item)
-                await self.event_bus.publish("ORDER_COMPLETED", {"item": item, "status": "success_on_retry"})
-            except Exception as retry_error:
-                logger.error(f"[BlinkItAgent] Retry also failed: {retry_error}")
-                await self.event_bus.publish("ORDER_FAILED", {"item": item, "error": str(e)})
-                self.set_status("error", str(e))
+            await self.event_bus.publish("ORDER_FAILED", {"item": item, "error": str(e)})
+            self.set_status("error", str(e))
 
     async def _navigate_and_login(self):
         """Go to BlinkeyIt and login first — always login before anything else."""
@@ -113,14 +119,21 @@ class BlinkItAgent(BaseAgent):
         logger.info("[BlinkItAgent] Navigated to BlinkeyIt and logged in")
 
     async def _search_item(self, item: str):
-        """Search for the requested item. Wait 5s after typing for results to load."""
+        """Type the full search term in the search bar and wait for results."""
         search_agent = Agent(
             task=f"""
-            On the current page, find the search bar (it has placeholder text like "Search for kitkat and more.").
-            Click on it and type "{item}".
-            Then press Enter to search.
-            IMPORTANT: After searching, WAIT and do nothing for a few seconds — the search results take time to load.
-            Do NOT click anything until product cards are visible on the page.
+            You are on the BlinkeyIt homepage or any page on the site.
+
+            1. Find the search bar at the top of the page. It has placeholder text like "Search for atta dal and more."
+               If you see an animated typing placeholder instead of an input field, CLICK on it — that will navigate to the search page and show the real input field.
+            2. Click on the search input field to focus it.
+            3. Type the COMPLETE word: "{item}"
+               IMPORTANT: Type the FULL word completely. Do NOT press Enter mid-word. Make sure every letter is typed.
+            4. After typing the full word, press Enter to search.
+            5. WAIT and do nothing. Let the search results load completely.
+               Look for product cards with images, names, prices, and green "Add" buttons.
+               Or look for "Search Results:" text followed by a count number.
+            6. Do NOT click on any product. Just wait for results to fully appear.
             """,
             llm=self.llm,
             browser_session=self.browser_session,
@@ -128,7 +141,7 @@ class BlinkItAgent(BaseAgent):
         )
         await search_agent.run()
 
-        # Explicit 5-second wait for search results to load
+        # Wait for search results to fully render
         logger.info(f"[BlinkItAgent] Waiting 5s for search results to load...")
         await asyncio.sleep(5)
 
@@ -158,6 +171,32 @@ class BlinkItAgent(BaseAgent):
         await self.log("extract_options", "", json.dumps(options))
         return options
 
+    async def _get_fallback_search_term(self, original_item: str) -> str | None:
+        """Ask LLM for a specific, common product name to search on Blinkit."""
+        try:
+            response = await self.openai_client.chat.completions.create(
+                model=config.LLM_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You help find products on an Indian grocery delivery app called Blinkit. Given a vague or generic item name, return a single specific product name that is commonly available on Blinkit. Reply with ONLY the product name, nothing else. Keep it short (1-3 words).",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"My girlfriend asked me to order \"{original_item}\". I searched for it on Blinkit but got no results. What specific product name should I search for instead? For example, if she said 'chocolate' I should search 'Dairy Milk' or 'KitKat'. Give me one specific name.",
+                    },
+                ],
+                temperature=0.3,
+                max_tokens=20,
+            )
+            fallback = response.choices[0].message.content.strip().strip('"').strip("'")
+            logger.info(f"[BlinkItAgent] LLM fallback suggestion: '{original_item}' → '{fallback}'")
+            await self.log("fallback_search", original_item, fallback)
+            return fallback
+        except Exception as e:
+            logger.error(f"[BlinkItAgent] Fallback LLM call failed: {e}")
+            return None
+
     def _parse_options(self, text: str) -> list[dict]:
         """Parse JSON product list from browser-use output."""
         if not text:
@@ -183,14 +222,21 @@ class BlinkItAgent(BaseAgent):
         logger.warning(f"[BlinkItAgent] Could not parse options from: {text[:200]}")
         return []
 
-    async def _add_to_cart_and_checkout(self, product_name: str):
-        """Click on the product, add to cart, and complete checkout."""
-        # Step A: Click product and add to cart
+    async def _add_to_cart(self, product_name: str):
+        """Find the product in search results and click its Add button."""
         cart_agent = Agent(
             task=f"""
-            Find the product named "{product_name}" (or the closest match) in the product listings.
-            Click the green "Add" button on that product card to add it to cart.
-            Do NOT click on the product itself — just click the "Add" button directly.
+            You are on a search results page showing product cards in a grid.
+            Each card has a product image, name, price, and a green "Add" button at the bottom.
+
+            Find the product card whose name matches or is closest to: "{product_name}"
+            Click the green "Add" button on THAT specific card.
+
+            IMPORTANT:
+            - Do NOT click on the product image or name (that navigates to a different page).
+            - ONLY click the green "Add" button on the card.
+            - After clicking, the "Add" button will change to show quantity controls (- 1 +). That means it worked.
+            - Stay on this page. Do NOT navigate anywhere else.
             """,
             llm=self.llm,
             browser_session=self.browser_session,
@@ -200,29 +246,60 @@ class BlinkItAgent(BaseAgent):
         await self.log("add_to_cart", product_name)
         logger.info(f"[BlinkItAgent] Added to cart: {product_name}")
 
-        await asyncio.sleep(1)
+        # Wait for cart state to update
+        await asyncio.sleep(2)
 
-        # Step B: Go to cart and checkout
+    async def _checkout(self):
+        """Open the cart sidebar, proceed to checkout, and place order via COD."""
+        # Step A: Open the cart sidebar and proceed
+        cart_open_agent = Agent(
+            task=f"""
+            You are on the search results page. An item has already been added to the cart.
+
+            Look at the top-right header area. There should be a green cart button that shows the item count and total price (e.g. "1 Item ₹120" or "My Cart").
+            Click on it to open the cart sidebar.
+
+            A sidebar/panel will slide in from the right showing the cart items and a bill summary.
+            At the bottom of this sidebar, there is a green "Proceed" button.
+            Click the "Proceed" button.
+
+            You will be taken to the checkout page at /checkout.
+            """,
+            llm=self.llm,
+            browser_session=self.browser_session,
+            use_judge=False,
+        )
+        await cart_open_agent.run()
+        logger.info("[BlinkItAgent] Cart opened and proceeded to checkout")
+
+        await asyncio.sleep(2)
+
+        # Step B: Complete checkout with COD
         checkout_agent = Agent(
             task=f"""
-            Now go to the shopping cart. Look for the green cart button in the top-right header (it shows item count and price, or says "My Cart").
-            Click on it to open the cart.
+            You are now on the checkout page. It has two sections:
+            - Left side: delivery address (one or more addresses with radio buttons)
+            - Right side: order summary with payment options
 
-            In the cart:
-            1. Verify the item is there
-            2. Click the green "Proceed" button at the bottom of the cart
-            3. On the checkout page, you will see your address on the left and a summary on the right.
-            4. DO NOT try to add a new address. Use whatever address is already shown.
-            5. For payment: click the "Cash on Delivery" button (the one with green border). Do NOT click "Online Payment".
-            6. Wait for the order confirmation.
+            Do the following:
+            1. If an address is already selected (radio button checked), leave it as is.
+               If no address is selected, click the first address radio button.
+            2. Look for the payment buttons. There are two options:
+               - "Online Payment"
+               - "Cash on Delivery"
+            3. Click the "Cash on Delivery" button to place the order.
+            4. Wait for the order confirmation or success page.
+
+            IMPORTANT: Do NOT click "Online Payment". Only use "Cash on Delivery".
+            IMPORTANT: Do NOT try to add a new address.
             """,
             llm=self.llm,
             browser_session=self.browser_session,
             use_judge=False,
         )
         await checkout_agent.run()
-        await self.log("checkout", product_name)
-        logger.info(f"[BlinkItAgent] Checkout completed for: {product_name}")
+        await self.log("checkout", "COD order placed")
+        logger.info("[BlinkItAgent] Checkout completed via Cash on Delivery")
 
     async def teardown(self):
         """Cleanup."""

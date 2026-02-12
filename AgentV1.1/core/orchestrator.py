@@ -33,6 +33,8 @@ class Orchestrator:
         self._whatsapp_task: asyncio.Task | None = None
         self._blinkit_task: asyncio.Task | None = None
         self._running = False
+        self.ordering_in_progress = False
+        self._order_queue: list[str] = []
 
     async def start(self):
         """Initialize everything and start the WhatsApp agent."""
@@ -82,13 +84,19 @@ class Orchestrator:
             logger.warning("ORDER_REQUESTED with no item")
             return
 
+        if self.ordering_in_progress:
+            self._order_queue.append(item)
+            logger.info(f"Order in progress, queued '{item}' (queue size: {len(self._order_queue)})")
+            await self.memory.log_action("Orchestrator", "order_queued", item)
+            return
+
+        await self._start_order(item)
+
+    async def _start_order(self, item: str):
+        """Launch a BlinkIt order for the given item."""
+        self.ordering_in_progress = True
         logger.info(f"=== Order requested: {item} ===")
         await self.memory.log_action("Orchestrator", "order_requested", item)
-
-        # Pause WhatsApp polling while BlinkIt runs to save LLM calls
-        if self.whatsapp_agent:
-            self.whatsapp_agent._running = False
-            logger.info("Paused WhatsApp polling during order")
 
         # Create a SEPARATE browser session for BlinkIt so it doesn't
         # fight with WhatsApp over navigation
@@ -105,19 +113,21 @@ class Orchestrator:
             intent_detector=self.intent_detector,
         )
 
-        # Run BlinkIt ordering, then cleanup and resume WhatsApp
+        # Run BlinkIt ordering concurrently — WhatsApp keeps polling
         self._blinkit_task = asyncio.create_task(
             self._run_blinkit_order(item, blinkit_session)
         )
-        logger.info(f"BlinkIt agent spawned for: {item} (separate browser)")
+        logger.info(f"BlinkIt agent spawned for: {item} (separate browser, WhatsApp still active)")
 
     async def _run_blinkit_order(self, item: str, blinkit_session: BrowserSession):
-        """Run the BlinkIt order flow, then cleanup session and resume WhatsApp."""
+        """Run the BlinkIt order flow, then cleanup session and process next queued order."""
         try:
             await self.blinkit_agent.run(item=item)
         except Exception as e:
             logger.error(f"BlinkIt order task failed: {e}")
         finally:
+            self.ordering_in_progress = False
+
             # Kill the BlinkIt browser session
             try:
                 await blinkit_session.kill()
@@ -125,11 +135,11 @@ class Orchestrator:
             except Exception:
                 pass
 
-            # Resume WhatsApp polling
-            if self.whatsapp_agent:
-                self.whatsapp_agent._running = True
-                self._whatsapp_task = asyncio.create_task(self.whatsapp_agent.run())
-                logger.info("Resumed WhatsApp polling after order")
+            # Process next queued order if any
+            if self._order_queue:
+                next_item = self._order_queue.pop(0)
+                logger.info(f"Processing next queued order: {next_item} (remaining: {len(self._order_queue)})")
+                await self._start_order(next_item)
 
     async def _handle_order_complete(self, payload: dict):
         """Log order completion."""
