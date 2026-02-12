@@ -1,421 +1,318 @@
 #!/usr/bin/env python3
+"""
+Comprehensive Backend Testing Script for AgentV1.2
+Tests both Blinkit2 API endpoints and agentV1.2 code validation
+"""
+
 import requests
 import sys
-import json
+import os
+import subprocess
+import importlib.util
 from datetime import datetime
+from pathlib import Path
 
-# Use the public endpoint from frontend .env
-API_URL = "https://7dcd99ce-af52-4298-9cbb-20dfd53c19b9.preview.emergentagent.com"
+# Get backend URL from frontend .env
+BACKEND_URL = "https://chat-messenger-app-7.preview.emergentagent.com"
 
-class Blinkit2APITester:
-    def __init__(self, base_url=API_URL):
-        self.base_url = base_url
-        self.token = None
-        self.user_id = None
+class BackendTester:
+    def __init__(self):
         self.tests_run = 0
         self.tests_passed = 0
-        self.failed_tests = []
-        self.cart_items = []
-
-    def log(self, msg):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
-
-    def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
-        """Run a single API test"""
-        url = f"{self.base_url}/api/{endpoint.lstrip('/')}"
-        if params:
-            url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+        self.test_results = []
         
-        headers = {'Content-Type': 'application/json'}
-        
+    def log_test(self, test_name, passed, details=""):
         self.tests_run += 1
-        self.log(f"🔍 Testing {name}...")
-        
-        try:
-            if method == 'GET':
-                response = requests.get(url, headers=headers, timeout=15)
-            elif method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=15)
-            elif method == 'PUT':
-                response = requests.put(url, json=data, headers=headers, timeout=15)
-            elif method == 'DELETE':
-                response = requests.delete(url, json=data, headers=headers, timeout=15)
-
-            success = response.status_code == expected_status
-            if success:
-                self.tests_passed += 1
-                self.log(f"✅ {name} - Status: {response.status_code}")
-                try:
-                    return True, response.json()
-                except:
-                    return True, response.text
-            else:
-                self.log(f"❌ {name} - Expected {expected_status}, got {response.status_code}")
-                try:
-                    error_detail = response.json()
-                    self.log(f"   Error: {error_detail}")
-                except:
-                    self.log(f"   Response: {response.text[:200]}")
-                self.failed_tests.append({
-                    "test": name,
-                    "endpoint": endpoint,
-                    "expected": expected_status,
-                    "actual": response.status_code,
-                    "error": response.text[:200]
-                })
-                return False, {}
-
-        except requests.exceptions.Timeout:
-            self.log(f"❌ {name} - Request timed out")
-            self.failed_tests.append({"test": name, "endpoint": endpoint, "error": "Timeout"})
-            return False, {}
-        except Exception as e:
-            self.log(f"❌ {name} - Error: {str(e)}")
-            self.failed_tests.append({"test": name, "endpoint": endpoint, "error": str(e)})
-            return False, {}
-
-    def test_health(self):
-        """Test health endpoint"""
-        success, response = self.run_test(
-            "Health Check",
-            "GET",
-            "health",
-            200
-        )
-        if success and isinstance(response, dict) and response.get('status') == 'ok':
-            self.log("   Health check passed - Blinkit2 API is running")
-            return True
+        if passed:
+            self.tests_passed += 1
+            print(f"✅ {test_name}")
         else:
-            self.log("   Health check failed - wrong response format")
-            return False
-
-    def test_get_categories(self):
-        """Test getting categories - should return 12 categories"""
-        success, response = self.run_test(
-            "Get Categories",
-            "GET",
-            "categories",
-            200
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            categories = response['data']
-            if len(categories) >= 12:
-                self.log(f"   Found {len(categories)} categories (expected ≥12)")
-                return True, categories
+            print(f"❌ {test_name}: {details}")
+        
+        self.test_results.append({
+            "test": test_name,
+            "passed": passed,
+            "details": details
+        })
+        
+    def test_blinkit2_health(self):
+        """Test Blinkit2 health endpoint returns {status: ok, app: Blinkit2}"""
+        try:
+            response = requests.get(f"{BACKEND_URL}/api/health", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "ok" and data.get("app") == "Blinkit2":
+                    self.log_test("Blinkit2 /api/health returns correct format", True)
+                    return True
+                else:
+                    self.log_test("Blinkit2 /api/health returns correct format", False, 
+                                f"Expected {{status: ok, app: Blinkit2}}, got {data}")
+                    return False
             else:
-                self.log(f"   Only found {len(categories)} categories, expected 12")
-                return False, []
-        return False, []
-
-    def test_get_products(self):
-        """Test getting all products - should return 64+ products"""
-        success, response = self.run_test(
-            "Get All Products",
-            "GET",
-            "products",
-            200,
-            params={"limit": 100}
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            products = response['data']
-            total = response.get('total', 0)
-            if total >= 64:
-                self.log(f"   Found {total} total products (expected ≥64)")
-                return True, products
+                self.log_test("Blinkit2 /api/health returns correct format", False, 
+                            f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Blinkit2 /api/health returns correct format", False, str(e))
+            return False
+            
+    def test_blinkit2_categories(self):
+        """Test Blinkit2 categories API returns 12 categories"""
+        try:
+            response = requests.get(f"{BACKEND_URL}/api/categories", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                categories = data.get("categories", [])
+                if len(categories) == 12:
+                    self.log_test("Blinkit2 /api/categories returns 12 categories", True)
+                    return True
+                else:
+                    self.log_test("Blinkit2 /api/categories returns 12 categories", False, 
+                                f"Expected 12 categories, got {len(categories)}")
+                    return False
             else:
-                self.log(f"   Only found {total} products, expected 64+")
-                return False, []
-        return False, []
-
-    def test_get_products_by_category(self, category_id):
-        """Test getting products by category"""
-        success, response = self.run_test(
-            "Get Products by Category",
-            "GET",
-            "products",
-            200,
-            params={"category_id": category_id, "limit": 20}
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            products = response['data']
-            self.log(f"   Found {len(products)} products in category")
-            return True, products
-        return False, []
-
-    def test_login_demo_user(self):
-        """Test login with demo user"""
-        success, response = self.run_test(
-            "Login Demo User",
-            "POST",
-            "auth/login",
-            200,
-            data={"email": "demo@blinkit2.com", "password": "password123"}
-        )
-        if success and 'token' in response:
-            self.token = response['token']
-            self.user_id = response.get('user_id')
-            user_name = response.get('name', 'Unknown')
-            self.log(f"   Login successful - User: {user_name}")
-            return True
-        return False
-
-    def test_get_current_user(self):
-        """Test getting current user info"""
-        if not self.token:
-            self.log("   No token available")
+                self.log_test("Blinkit2 /api/categories returns 12 categories", False,
+                            f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Blinkit2 /api/categories returns 12 categories", False, str(e))
             return False
+    
+    def check_file_exists(self, filepath, description):
+        """Check if a file exists"""
+        path = Path(filepath)
+        exists = path.exists()
+        self.log_test(f"{description} exists", exists, 
+                     f"File not found: {filepath}" if not exists else "")
+        return exists
+    
+    def check_python_syntax(self, filepath, description):
+        """Check if a Python file has valid syntax"""
+        try:
+            result = subprocess.run([
+                'python3', '-c', f'import ast; ast.parse(open(r"{filepath}").read())'
+            ], capture_output=True, text=True, cwd='/app')
+            
+            if result.returncode == 0:
+                self.log_test(f"{description} has valid Python syntax", True)
+                return True
+            else:
+                self.log_test(f"{description} has valid Python syntax", False, 
+                            result.stderr.strip())
+                return False
+        except Exception as e:
+            self.log_test(f"{description} has valid Python syntax", False, str(e))
+            return False
+    
+    def check_python_imports(self, filepath, description):
+        """Check if a Python file's imports work"""
+        try:
+            # Change to agentV1.2 directory for imports to work
+            result = subprocess.run([
+                'python3', '-c', f'''
+import sys
+import os
+sys.path.insert(0, "/app/agentV1.2")
+os.chdir("/app/agentV1.2")
+spec = __import__("importlib.util", fromlist=["spec_from_file_location"]).spec_from_file_location("test_module", r"{filepath}")
+module = __import__("importlib.util", fromlist=["module_from_spec"]).module_from_spec(spec)
+spec.loader.exec_module(module)
+print("Imports successful")
+'''
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                self.log_test(f"{description} imports work", True)
+                return True
+            else:
+                self.log_test(f"{description} imports work", False, 
+                            result.stderr.strip())
+                return False
+        except subprocess.TimeoutExpired:
+            self.log_test(f"{description} imports work", False, "Import check timeout")
+            return False
+        except Exception as e:
+            self.log_test(f"{description} imports work", False, str(e))
+            return False
+    
+    def check_html_valid(self, filepath, description):
+        """Basic HTML validation"""
+        try:
+            with open(filepath, 'r') as f:
+                content = f.read()
+            
+            # Basic checks
+            has_doctype = '<!DOCTYPE html>' in content
+            has_html_tags = '<html' in content and '</html>' in content
+            has_head = '<head>' in content and '</head>' in content
+            has_body = '<body>' in content and '</body>' in content
+            
+            if has_doctype and has_html_tags and has_head and has_body:
+                self.log_test(f"{description} is valid HTML", True)
+                return True
+            else:
+                missing = []
+                if not has_doctype: missing.append("DOCTYPE")
+                if not has_html_tags: missing.append("html tags")
+                if not has_head: missing.append("head tags")
+                if not has_body: missing.append("body tags")
+                self.log_test(f"{description} is valid HTML", False, 
+                            f"Missing: {', '.join(missing)}")
+                return False
+                
+        except Exception as e:
+            self.log_test(f"{description} is valid HTML", False, str(e))
+            return False
+    
+    def test_agentV1_2_structure(self):
+        """Test agentV1.2 folder structure and file validity"""
+        base_path = "/app/agentV1.2"
         
-        success, response = self.run_test(
-            "Get Current User",
-            "GET",
-            "auth/me",
-            200,
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success and 'user_id' in response:
-            self.log(f"   Current user: {response.get('name', 'Unknown')}")
-            return True
-        return False
-
-    def test_add_to_cart(self, product_id):
-        """Test adding product to cart"""
-        if not self.token:
-            self.log("   No token available")
-            return False
-            
-        success, response = self.run_test(
-            "Add Product to Cart",
-            "POST",
-            "cart/add",
-            200,
-            data={"product_id": product_id},
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success:
-            self.log(f"   Added product {product_id} to cart")
-            return True, response.get('cart_item_id')
-        return False, None
-
-    def test_get_cart(self):
-        """Test getting cart contents"""
-        if not self.token:
-            self.log("   No token available")
-            return False
-            
-        success, response = self.run_test(
-            "Get Cart",
-            "GET",
-            "cart",
-            200,
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            cart_items = response['data']
-            self.log(f"   Cart contains {len(cart_items)} items")
-            self.cart_items = cart_items
-            return True, cart_items
-        return False, []
-
-    def test_update_cart_quantity(self, cart_item_id, quantity):
-        """Test updating cart item quantity"""
-        if not self.token:
-            return False
-            
-        success, response = self.run_test(
-            "Update Cart Quantity",
-            "PUT",
-            "cart/update",
-            200,
-            data={"cart_item_id": cart_item_id, "quantity": quantity},
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success:
-            self.log(f"   Updated cart item quantity to {quantity}")
-            return True
-        return False
-
-    def test_search_products(self, search_term="Maggi"):
-        """Test product search functionality"""
-        success, response = self.run_test(
-            f"Search Products '{search_term}'",
-            "GET",
-            "products",
-            200,
-            params={"search": search_term, "limit": 10}
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            products = response['data']
-            self.log(f"   Found {len(products)} products for '{search_term}'")
-            return True, products
-        return False, []
-
-    def test_add_address(self):
-        """Test adding delivery address"""
-        if not self.token:
-            return False
-            
-        test_address = {
-            "address_line": "Test Address, Test Street",
-            "city": "Test City",
-            "state": "Test State",
-            "pincode": "123456",
-            "mobile": "9876543210"
-        }
+        # Check folder exists
+        self.check_file_exists(base_path, "agentV1.2 folder")
         
-        success, response = self.run_test(
-            "Add Address",
-            "POST",
-            "addresses",
-            200,
-            data=test_address,
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success and 'address_id' in response:
-            self.log(f"   Added address: {response['address_id']}")
-            return True, response['address_id']
-        return False, None
-
-    def test_place_order(self, address_id):
-        """Test placing an order"""
-        if not self.token or not address_id:
-            return False
-            
-        success, response = self.run_test(
-            "Place Order",
-            "POST",
-            "orders",
-            200,
-            data={"address_id": address_id, "payment_method": "cod"},
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success and 'order_id' in response:
-            self.log(f"   Order placed: {response['order_id']}")
-            return True, response['order_id']
-        return False, None
-
-    def test_get_orders(self):
-        """Test getting order history"""
-        if not self.token:
-            return False
-            
-        success, response = self.run_test(
-            "Get Order History",
-            "GET",
-            "orders",
-            200,
-            params={"authorization": f"Bearer {self.token}"}
-        )
-        if success and isinstance(response, dict) and 'data' in response:
-            orders = response['data']
-            self.log(f"   Found {len(orders)} orders in history")
-            return True, orders
-        return False, []
-
-    def test_register_new_user(self):
-        """Test user registration"""
-        timestamp = datetime.now().strftime("%H%M%S")
-        test_user = {
-            "name": f"Test User {timestamp}",
-            "email": f"test_{timestamp}@example.com",
-            "password": "testpass123",
-            "mobile": "9999999999"
-        }
+        # Check main Python files exist and have valid syntax
+        python_files = [
+            ("main.py", "agentV1.2/main.py"),
+            ("config.py", "agentV1.2/config.py"),
+            ("core/orchestrator.py", "agentV1.2/core/orchestrator.py"),
+            ("core/memory.py", "agentV1.2/core/memory.py"), 
+            ("core/intent.py", "agentV1.2/core/intent.py"),
+            ("agents/whatsapp_agent.py", "agentV1.2/agents/whatsapp_agent.py"),
+            ("agents/blinkit_agent.py", "agentV1.2/agents/blinkit_agent.py"),
+            ("agents/browser_agent.py", "agentV1.2/agents/browser_agent.py"),
+            ("events/bus.py", "agentV1.2/events/bus.py"),
+        ]
         
-        success, response = self.run_test(
-            "Register New User",
-            "POST",
-            "auth/register",
-            200,
-            data=test_user
-        )
-        if success and 'token' in response:
-            self.log(f"   Registered user: {test_user['name']}")
-            return True
-        return False
+        for file_path, description in python_files:
+            full_path = f"{base_path}/{file_path}"
+            if self.check_file_exists(full_path, description):
+                self.check_python_syntax(full_path, description)
+                # Only check imports for non-main files to avoid running servers
+                if not file_path.endswith("main.py"):
+                    self.check_python_imports(full_path, description)
+        
+        # Check HTML file
+        html_path = f"{base_path}/ui/dashboard.html"
+        if self.check_file_exists(html_path, "agentV1.2/ui/dashboard.html"):
+            self.check_html_valid(html_path, "agentV1.2/ui/dashboard.html")
+        
+        # Check documentation files
+        self.check_file_exists(f"{base_path}/supermemory.md", "agentV1.2/supermemory.md")
+        self.check_file_exists(f"{base_path}/README.md", "agentV1.2/README.md")
+        self.check_file_exists(f"{base_path}/requirements.txt", "agentV1.2/requirements.txt")
+        
+    def check_class_definitions(self):
+        """Check specific class definitions exist"""
+        
+        # Check config has Config dataclass
+        try:
+            result = subprocess.run([
+                'python3', '-c', '''
+import sys
+sys.path.insert(0, "/app/agentV1.2")
+from config import Config, config
+print("Config dataclass:", hasattr(Config, "__dataclass_fields__"))
+print("Config instance:", hasattr(config, "OPENAI_API_KEY"))
+'''
+            ], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and "Config dataclass: True" in result.stdout:
+                self.log_test("agentV1.2/config.py has valid Config dataclass", True)
+            else:
+                self.log_test("agentV1.2/config.py has valid Config dataclass", False, result.stderr)
+        except Exception as e:
+            self.log_test("agentV1.2/config.py has valid Config dataclass", False, str(e))
+        
+        # Check other classes exist
+        class_checks = [
+            ("core/orchestrator.py", "Orchestrator", "core.orchestrator"),
+            ("core/memory.py", "Memory", "core.memory"),
+            ("core/intent.py", "IntentDetector", "core.intent"),
+            ("events/bus.py", "EventBus", "events.bus"),
+            ("agents/whatsapp_agent.py", "WhatsAppAgent", "agents.whatsapp_agent"),
+            ("agents/blinkit_agent.py", "BlinkItAgent", "agents.blinkit_agent"),
+            ("agents/browser_agent.py", "BrowserTaskAgent", "agents.browser_agent"),
+        ]
+        
+        for file_path, class_name, module_path in class_checks:
+            try:
+                result = subprocess.run([
+                    'python3', '-c', f'''
+import sys
+import os
+sys.path.insert(0, "/app/agentV1.2")
+os.chdir("/app/agentV1.2")
+from {module_path} import {class_name}
+print("Class {class_name} found and importable")
+'''
+                ], capture_output=True, text=True, timeout=15)
+                
+                if result.returncode == 0:
+                    self.log_test(f"{file_path} has valid {class_name} class", True)
+                else:
+                    self.log_test(f"{file_path} has valid {class_name} class", False, result.stderr.strip())
+            except Exception as e:
+                self.log_test(f"{file_path} has valid {class_name} class", False, str(e))
+    
+    def run_all_tests(self):
+        """Run all tests"""
+        print("=" * 60)
+        print("  AgentV1.2 Backend Testing")
+        print("=" * 60)
+        print(f"Testing backend URL: {BACKEND_URL}")
+        print("-" * 60)
+        
+        # Test Blinkit2 APIs first
+        print("\n🧪 Testing Blinkit2 APIs...")
+        blinkit_health = self.test_blinkit2_health()
+        blinkit_categories = self.test_blinkit2_categories()
+        
+        # Test agentV1.2 structure
+        print("\n🧪 Testing agentV1.2 structure...")
+        self.test_agentV1_2_structure()
+        
+        print("\n🧪 Testing agentV1.2 classes...")
+        self.check_class_definitions()
+        
+        # Summary
+        print("\n" + "=" * 60)
+        print("  TEST SUMMARY")
+        print("=" * 60)
+        print(f"Tests Run: {self.tests_run}")
+        print(f"Tests Passed: {self.tests_passed}")
+        print(f"Success Rate: {(self.tests_passed/self.tests_run)*100:.1f}%")
+        
+        # Critical failures check
+        critical_failures = []
+        if not blinkit_health:
+            critical_failures.append("Blinkit2 health API not working")
+        if not blinkit_categories:
+            critical_failures.append("Blinkit2 categories API not working")
+            
+        failed_tests = [r for r in self.test_results if not r["passed"]]
+        
+        print("\n📊 Results:")
+        print(f"✅ Blinkit2 APIs: {'Working' if blinkit_health and blinkit_categories else 'FAILED'}")
+        print(f"✅ AgentV1.2 Structure: {self.tests_passed - (2 if blinkit_health and blinkit_categories else (1 if blinkit_health or blinkit_categories else 0))}/{self.tests_run - 2} files valid")
+        
+        if failed_tests:
+            print(f"\n❌ Failed Tests ({len(failed_tests)}):")
+            for test in failed_tests:
+                print(f"  - {test['test']}: {test['details']}")
+        
+        if critical_failures:
+            print(f"\n🚨 CRITICAL FAILURES:")
+            for failure in critical_failures:
+                print(f"  - {failure}")
+            return False
+            
+        return len(failed_tests) == 0
 
 def main():
-    tester = Blinkit2APITester()
-    
-    print("🚀 Starting Blinkit2 API Testing...")
-    print(f"📍 Testing against: {API_URL}")
-    print("=" * 60)
-    
-    # Test 1: Health check
-    if not tester.test_health():
-        print("❌ Health check failed, aborting tests")
-        return 1
-    
-    # Test 2: Get categories (should be 12)
-    categories_success, categories = tester.test_get_categories()
-    if not categories_success:
-        print("❌ Categories test failed")
-        return 1
-    
-    # Test 3: Get all products (should be 64+)
-    products_success, products = tester.test_get_products()
-    if not products_success:
-        print("❌ Products test failed")
-        return 1
-    
-    # Test 4: Get products by category (using first category)
-    if categories:
-        first_category = categories[0]
-        tester.test_get_products_by_category(first_category['category_id'])
-    
-    # Test 5: Search functionality
-    tester.test_search_products("Maggi")
-    tester.test_search_products("banana")
-    
-    # Test 6: Login with demo user
-    if not tester.test_login_demo_user():
-        print("❌ Demo user login failed, skipping auth-required tests")
-        print("\n" + "=" * 60)
-        print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} passed")
-        return 1
-    
-    # Test 7: Get current user info
-    tester.test_get_current_user()
-    
-    # Test 8: Cart functionality
-    if products:
-        # Add first product to cart
-        first_product = products[0]
-        add_success, cart_item_id = tester.test_add_to_cart(first_product['product_id'])
-        
-        if add_success:
-            # Get cart contents
-            cart_success, cart_items = tester.test_get_cart()
-            
-            if cart_success and cart_items and cart_item_id:
-                # Update quantity
-                tester.test_update_cart_quantity(cart_item_id, 2)
-                
-                # Test address and order flow
-                address_success, address_id = tester.test_add_address()
-                
-                if address_success:
-                    # Place order
-                    order_success, order_id = tester.test_place_order(address_id)
-                    
-                    if order_success:
-                        # Get order history
-                        tester.test_get_orders()
-    
-    # Test 9: User registration
-    tester.test_register_new_user()
-    
-    print("\n" + "=" * 60)
-    print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} passed")
-    
-    if tester.failed_tests:
-        print("\n❌ Failed Tests:")
-        for test in tester.failed_tests:
-            print(f"  - {test['test']}: {test.get('error', 'Unknown error')}")
-    
-    # Return 0 if most critical tests pass
-    critical_passed = tester.tests_passed >= 8  # Health + Categories + Products + Login + Cart basics
-    return 0 if critical_passed else 1
+    tester = BackendTester()
+    success = tester.run_all_tests()
+    return 0 if success else 1
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    sys.exit(main())
