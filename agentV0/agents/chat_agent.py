@@ -37,7 +37,7 @@ def get_llm():
             temperature=0.7,
         )
     return ChatOpenAI(
-        model="gpt-5.2",
+        model="gpt-4o",
         api_key=OPENAI_API_KEY,
         temperature=0.7,
     )
