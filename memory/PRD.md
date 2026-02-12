@@ -1,66 +1,60 @@
-# Blinkit2 & WhatsApp2 - Product Requirements Document
+# Blinkit2, WhatsApp2 & AgentV1.2 - Product Requirements Document
 
 ## Original Problem Statements
-1. **WhatsApp2**: Build a WhatsApp Web clone with real-time messaging, contacts sidebar, chat conversations, JWT auth, WebSocket messaging
-2. **Blinkit2**: Build a Blinkit clone (Indian grocery delivery app) in a new folder with name Blinkit2, with data and everything
+1. **WhatsApp2**: Build a WhatsApp Web clone with real-time messaging
+2. **Blinkit2**: Build a Blinkit grocery delivery clone
+3. **AgentV1.2**: Create a browser agent (improved from V1.1) in a new folder `agentV1.2`
 
-## Architecture
-- **Frontend**: React 18 (CRA) on port 3000
-- **Backend**: FastAPI on port 8001
-- **Database**: MongoDB (local)
-- **Auth**: JWT (PyJWT + bcrypt)
+## Active Projects
 
-## Current Active App: Blinkit2
+### Blinkit2 (Running on ports 8001/3000)
+- React + FastAPI + MongoDB grocery delivery clone
+- 12 categories, 64+ Indian grocery products
+- Cart, checkout, orders, JWT auth
+- 100% tests passing
 
-### Core Features Implemented (Jan 2026)
-- [x] Home page with yellow banner, 12 category grid, product carousels
-- [x] 64+ Indian grocery products with realistic names, prices in INR, images
-- [x] Product browsing by category with horizontal scroll
-- [x] Search products (text search)
-- [x] Product detail page with description, pricing, add to cart
-- [x] Cart sidebar with add/remove/update quantity
-- [x] Bill details (items total, delivery charge, grand total)
-- [x] Checkout with address form + Cash on Delivery
-- [x] Order placement with "BK2-" order IDs
-- [x] Order history page
-- [x] JWT authentication (login/register)
-- [x] Quick login with demo user
-- [x] "Delivery in 10 minutes" branding throughout
-- [x] Blinkit yellow-green theme (#F8CB46 + #0C831F)
-- [x] Discount badges, strikethrough prices
-- [x] Responsive design
+### WhatsApp2 (Previously built, preserved in /app/whatsApp2/)
+- WebSocket-based real-time messaging clone
+- 100% tests passing
 
-### Categories (12)
-Fruits & Vegetables, Dairy & Bread, Snacks & Munchies, Cold Drinks & Juices, Instant & Frozen Food, Tea Coffee & Health Drinks, Atta Rice & Dal, Masala Oil & More, Sweet Tooth, Baby Care, Cleaning Essentials, Personal Care
+### AgentV1.2 (Standalone project at /app/agentV1.2/)
+- Browser automation agent with FastAPI dashboard
+- Improvements over V1.1:
+  1. Web Dashboard (HTML UI with live agent status, logs, events)
+  2. WebSocket live feed for real-time log streaming
+  3. General Browser Task Agent (not just WhatsApp/Blinkit)
+  4. Task queue tracked in SQLite
+  5. Better error recovery with MAX_RETRIES
+  6. SuperMemory hot reload via API
+  7. Configuration API endpoints
+- Requires OpenAI API key to run
+- Runs on port 8100 (separate from Blinkit2)
 
-### Test Results
-- Backend: 100% (15/15 tests passed)
-- Frontend: 100% (25/25 features verified)
+## AgentV1.2 Architecture
+```
+Orchestrator
+├── WhatsApp Agent (polls messages, detects intent, auto-replies)
+├── BlinkIt Agent (searches & orders groceries automatically)
+├── Browser Task Agent (NEW - executes arbitrary browser tasks)
+├── Event Bus (async pub/sub with WebSocket broadcast)
+├── Memory (SQLite - conversations, logs, tasks, state)
+├── SuperMemory (personality & guardrails from .md file)
+├── Intent Detector (OpenAI LLM for chat intent + food decisions)
+└── Dashboard (FastAPI + HTML UI + WebSocket live updates)
+```
 
-## Previous App: WhatsApp2
-- Real-time messaging via WebSockets
-- JWT auth, contact sidebar, chat bubbles, read receipts
-- All tests passed (100%)
-- Files preserved in `/app/whatsApp2/`
+## Test Results
+- Blinkit2 API: 100% passing
+- AgentV1.2 Structure: 100% (all 17 tests passed)
+- All Python files have valid syntax
 
 ## Prioritized Backlog
-### P0 (Critical) - None remaining for MVP
+### P1
+- Add screenshot capture system to dashboard
+- Multi-tab browser support for parallel agents
+- Agent execution history with replay
 
-### P1 (High)
-- Product image upload/management
-- Multiple delivery addresses
-- Order tracking with live status updates
-- Online payment integration (Razorpay/Stripe)
-
-### P2 (Medium)
-- Coupon codes & offers
-- Product reviews & ratings
-- Wishlist/saved items
-- Push notifications for order updates
-- Admin panel for product/order management
-
-### P3 (Low)
-- Dark mode
-- Multi-language support (Hindi, etc.)
-- Referral system
-- Delivery partner tracking on map
+### P2
+- Voice command support
+- Scheduled task execution (cron-like)
+- Plugin system for custom agents
