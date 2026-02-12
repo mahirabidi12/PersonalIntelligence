@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@200;300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Source Sans 3', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: #eae6df;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root {
+  height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input, textarea, button {
+  font-family: inherit;
+}
+
+a {
+  color: #53bdeb;
+  text-decoration: none;
+}
+
+::selection {
+  background-color: #00a88440;
+}
