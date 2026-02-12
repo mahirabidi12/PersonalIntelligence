@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentV1.2 — Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface-2: #1a1a26;
+  --border: #2a2a3a;
+  --accent: #6366f1;
+  --accent-glow: rgba(99,102,241,0.15);
+  --green: #22c55e;
+  --green-glow: rgba(34,197,94,0.15);
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #e2e8f0;
+  --text-dim: #64748b;
+  --text-muted: #475569;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  background: var(--accent);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: white;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.header h1 span { color: var(--accent); }
+
+.version {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-dot 2s infinite;
+}
+
+.status-dot.offline { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.status-dot.pending { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.btn:hover { border-color: var(--accent); background: var(--accent-glow); }
+.btn-accent { background: var(--accent); border-color: var(--accent); color: white; }
+.btn-accent:hover { background: #5457e5; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 340px 1fr 320px;
+  gap: 1px;
+  min-height: calc(100vh - 73px);
+  background: var(--border);
+}
+
+.panel {
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-header h2 {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* Agent Status Cards */
+.agent-cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+
+.agent-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.agent-card-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+
+.agent-name { font-size: 14px; font-weight: 700; }
+
+.agent-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-running { background: var(--green-glow); color: var(--green); }
+.badge-idle { background: var(--accent-glow); color: var(--accent); }
+.badge-error { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge-stopped { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+.agent-action {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 4px;
+}
+
+/* Quick Actions */
+.quick-actions { display: flex; flex-direction: column; gap: 8px; }
+
+.quick-actions h3 {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+/* Task Input */
+.task-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.task-input-group label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.task-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.task-input:focus { border-color: var(--accent); }
+.task-input::placeholder { color: var(--text-muted); }
+
+select.task-select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+/* Log Stream */
+.log-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  line-height: 1.4;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.log-time { color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+.log-agent { color: var(--accent); font-weight: 600; flex-shrink: 0; min-width: 80px; }
+.log-action { color: var(--green); flex-shrink: 0; }
+.log-detail { color: var(--text-dim); flex: 1; word-break: break-word; }
+.log-entry.error .log-action { color: var(--red); }
+
+/* Events */
+.event-list { display: flex; flex-direction: column; gap: 6px; }
+
+.event-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  animation: slideUp 0.2s ease-out;
+}
+
+.event-item.order { border-left-color: var(--green); }
+.event-item.error { border-left-color: var(--red); }
+.event-item.task { border-left-color: var(--yellow); }
+
+.event-type {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.event-payload { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+/* Config Panel */
+.config-list { display: flex; flex-direction: column; gap: 8px; }
+
+.config-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.config-key { color: var(--text-dim); }
+.config-val { color: var(--text); font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .layout { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">A</div>
+    <h1>Agent<span>V1.2</span></h1>
+    <span class="version">v1.2.0</span>
+  </div>
+  <div class="header-right">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText" style="font-size:13px;color:var(--text-dim)">Connecting...</span>
+    <button class="btn" onclick="restartAgent()">Restart</button>
+    <button class="btn btn-danger" onclick="stopAgent()">Stop</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Left Panel: Control -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Control Center</h2>
+    </div>
+    <div class="panel-body">
+      <div class="agent-cards" id="agentCards">
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="agent-name">WhatsApp Agent</span>
+            <span class="agent-badge badge-stopped" id="waStatus">stopped</span>
+          </div>
+          <div class="agent-action" id="waAction">Not started</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="agent-name">Blinkit Agent</span>
+            <span class="agent-badge badge-stopped" id="bkStatus">stopped</span>
+          </div>
+          <div class="agent-action" id="bkAction">Not started</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-card-header">
+            <span class="agent-name">Browser Task Agent</span>
+            <span class="agent-badge badge-stopped" id="btStatus">stopped</span>
+          </div>
+          <div class="agent-action" id="btAction">Not started</div>
+        </div>
+      </div>
+
+      <div class="quick-actions">
+        <h3>Quick Actions</h3>
+        <button class="btn btn-accent" onclick="startWhatsApp()" style="width:100%">Start WhatsApp Agent</button>
+        <button class="btn" onclick="triggerOrder()" style="width:100%">Order Item (Blinkit)</button>
+        <button class="btn" onclick="reloadMemory()" style="width:100%">Reload SuperMemory</button>
+      </div>
+
+      <div class="task-input-group">
+        <label>Submit Task</label>
+        <select class="task-select" id="taskType">
+          <option value="browse">Browse / Extract</option>
+          <option value="blinkit_order">Blinkit Order</option>
+          <option value="custom">Custom Task</option>
+        </select>
+        <input type="text" class="task-input" id="taskUrl" placeholder="URL (optional)" style="min-height:36px">
+        <textarea class="task-input" id="taskDesc" placeholder="Describe the task..."></textarea>
+        <button class="btn btn-accent" onclick="submitTask()" style="width:100%">Submit Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center Panel: Logs -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Live Agent Logs</h2>
+      <button class="btn" onclick="clearLogs()" style="padding:4px 12px;font-size:11px">Clear</button>
+    </div>
+    <div class="panel-body" id="logPanel">
+      <div class="log-stream" id="logStream">
+        <div class="log-entry">
+          <span class="log-time">--:--:--</span>
+          <span class="log-agent">System</span>
+          <span class="log-action">init</span>
+          <span class="log-detail">Dashboard loaded. Connecting to agent...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Events + Config -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Events & Config</h2>
+    </div>
+    <div class="panel-body">
+      <h3 style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Live Events</h3>
+      <div class="event-list" id="eventList"></div>
+
+      <h3 style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin:20px 0 12px">Configuration</h3>
+      <div class="config-list" id="configList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = window.location.origin;
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+
+let ws = null;
+let reconnectTimer = null;
+
+// Fetch initial data
+async function fetchStatus() {
+  try {
+    const r = await fetch(`${BASE}/api/status`);
+    const d = await r.json();
+    updateAgentStatus(d);
+  } catch(e) {}
+}
+
+async function fetchConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config`);
+    const d = await r.json();
+    const list = document.getElementById('configList');
+    list.innerHTML = Object.entries(d).map(([k,v]) =>
+      `<div class="config-item"><span class="config-key">${k}</span><span class="config-val">${v}</span></div>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function fetchLogs() {
+  try {
+    const r = await fetch(`${BASE}/api/logs?limit=50`);
+    const d = await r.json();
+    const stream = document.getElementById('logStream');
+    stream.innerHTML = (d.logs || []).map(l => formatLog(l)).join('');
+    scrollLogsToBottom();
+  } catch(e) {}
+}
+
+function updateAgentStatus(d) {
+  if (!d) return;
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = 'status-dot' + (d.orchestrator === 'running' ? '' : ' offline');
+  text.textContent = d.orchestrator === 'running' ? 'Running' : 'Stopped';
+
+  updateBadge('waStatus', 'waAction', d.whatsapp_agent);
+  updateBadge('bkStatus', 'bkAction', d.blinkit_agent);
+  updateBadge('btStatus', 'btAction', d.browser_task_agent);
+}
+
+function updateBadge(statusId, actionId, agent) {
+  if (!agent) return;
+  const el = document.getElementById(statusId);
+  const act = document.getElementById(actionId);
+  el.textContent = agent.status;
+  el.className = 'agent-badge badge-' + (agent.status || 'stopped');
+  act.textContent = agent.action || 'Idle';
+}
+
+function formatLog(l) {
+  const time = l.timestamp ? l.timestamp.split(' ')[1] || l.timestamp.substring(11,19) : '--:--:--';
+  const isError = l.status === 'error';
+  return `<div class="log-entry${isError ? ' error' : ''}">
+    <span class="log-time">${time}</span>
+    <span class="log-agent">${l.agent_name}</span>
+    <span class="log-action">${l.action}</span>
+    <span class="log-detail">${(l.detail || '').substring(0,200)}</span>
+  </div>`;
+}
+
+function addLogEntry(agent, action, detail, status='ok') {
+  const stream = document.getElementById('logStream');
+  const time = new Date().toLocaleTimeString();
+  const isError = status === 'error';
+  stream.innerHTML += `<div class="log-entry${isError ? ' error' : ''}">
+    <span class="log-time">${time}</span>
+    <span class="log-agent">${agent}</span>
+    <span class="log-action">${action}</span>
+    <span class="log-detail">${(detail || '').substring(0,200)}</span>
+  </div>`;
+  scrollLogsToBottom();
+}
+
+function addEvent(event) {
+  const list = document.getElementById('eventList');
+  const type = event.event_type || '';
+  let cls = '';
+  if (type.includes('ORDER')) cls = 'order';
+  if (type.includes('FAIL') || type.includes('ERROR')) cls = 'error';
+  if (type.includes('TASK')) cls = 'task';
+
+  const html = `<div class="event-item ${cls}">
+    <div class="event-type">${type}</div>
+    <div class="event-payload">${JSON.stringify(event.payload || {}).substring(0,150)}</div>
+  </div>`;
+
+  list.innerHTML = html + list.innerHTML;
+  if (list.children.length > 50) list.removeChild(list.lastChild);
+}
+
+function scrollLogsToBottom() {
+  const panel = document.getElementById('logPanel');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLogs() {
+  document.getElementById('logStream').innerHTML = '';
+}
+
+// WebSocket
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    addLogEntry('System', 'ws_connected', 'Live feed connected');
+    fetchStatus();
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    if (data.event_type === 'AGENT_LOG') {
+      const p = data.payload;
+      addLogEntry(p.agent, p.action, p.detail, p.status);
+    }
+
+    addEvent(data);
+
+    // Refresh status on key events
+    if (['ORDER_COMPLETED','ORDER_FAILED','TASK_COMPLETED','TASK_FAILED'].includes(data.event_type)) {
+      fetchStatus();
+    }
+  };
+
+  ws.onclose = () => {
+    addLogEntry('System', 'ws_disconnected', 'Reconnecting in 3s...', 'error');
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {};
+}
+
+// Actions
+async function startWhatsApp() {
+  addLogEntry('Dashboard', 'action', 'Starting WhatsApp agent...');
+  await fetch(`${BASE}/api/whatsapp/start`, { method: 'POST' });
+  fetchStatus();
+}
+
+async function triggerOrder() {
+  const item = prompt('What item to order?', 'Hot Chocolate');
+  if (!item) return;
+  addLogEntry('Dashboard', 'action', `Ordering: ${item}`);
+  await fetch(`${BASE}/api/order`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({item}) });
+}
+
+async function submitTask() {
+  const type = document.getElementById('taskType').value;
+  const url = document.getElementById('taskUrl').value;
+  const desc = document.getElementById('taskDesc').value;
+  if (!desc) return;
+
+  addLogEntry('Dashboard', 'task_submit', desc);
+  const r = await fetch(`${BASE}/api/task`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ task_type: type, description: desc, url: url })
+  });
+  const d = await r.json();
+  addLogEntry('Dashboard', 'task_created', `ID: ${d.task_id}`);
+  document.getElementById('taskDesc').value = '';
+  document.getElementById('taskUrl').value = '';
+}
+
+async function reloadMemory() {
+  await fetch(`${BASE}/api/supermemory/reload`, { method: 'POST' });
+  addLogEntry('Dashboard', 'action', 'SuperMemory reloaded');
+}
+
+async function restartAgent() {
+  addLogEntry('Dashboard', 'action', 'Restarting orchestrator...');
+  await fetch(`${BASE}/api/restart`, { method: 'POST' });
+  setTimeout(fetchStatus, 2000);
+}
+
+async function stopAgent() {
+  addLogEntry('Dashboard', 'action', 'Stopping orchestrator...', 'error');
+  await fetch(`${BASE}/api/stop`, { method: 'POST' });
+  fetchStatus();
+}
+
+// Init
+fetchConfig();
+fetchLogs();
+fetchStatus();
+connectWS();
+setInterval(fetchStatus, 10000);
+</script>
+</body>
+</html>
