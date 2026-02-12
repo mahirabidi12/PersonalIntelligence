@@ -91,3 +91,7 @@ BlinkIt/server/.env
 # WhatsApp specific
 Whatsapp/.next/
 Whatsapp/out/
+-e 
+# Environment files
+*.env
+*.env.*
