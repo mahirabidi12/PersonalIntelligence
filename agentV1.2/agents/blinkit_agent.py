@@ -157,7 +157,7 @@ class BlinkItAgent(BaseAgent):
 
         await self.log("step", "Completing checkout with COD")
         checkout_agent = Agent(
-            task=f"""
+            task="""
             On the checkout page:
             1. Fill address if required (use "123 Test Street" / "Mumbai" / "Maharashtra" / "400001" / "9876543210")
             2. Select Cash on Delivery for payment
