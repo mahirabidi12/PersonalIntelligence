@@ -168,4 +168,4 @@ class BlinkItAgent(BaseAgent):
             browser=self.browser,
         )
         await checkout_agent.run()
-        await self.log("checkout_done", f"Order placed for: {product_name}")
+        await self.log("checkout_done", "Order placed for: " + product_name)

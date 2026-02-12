@@ -137,15 +137,19 @@ class Orchestrator:
             await self.whatsapp_agent.teardown()
         if self._whatsapp_task:
             self._whatsapp_task.cancel()
-            try: await self._whatsapp_task
-            except asyncio.CancelledError: pass
+            try:
+                await self._whatsapp_task
+            except asyncio.CancelledError:
+                pass
 
         if self.blinkit_agent:
             await self.blinkit_agent.teardown()
         if self._blinkit_task and not self._blinkit_task.done():
             self._blinkit_task.cancel()
-            try: await self._blinkit_task
-            except asyncio.CancelledError: pass
+            try:
+                await self._blinkit_task
+            except asyncio.CancelledError:
+                pass
 
         for t in self._browser_tasks:
             if not t.done():
