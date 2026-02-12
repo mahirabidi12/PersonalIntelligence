@@ -62,7 +62,7 @@ class BackendTester:
             response = requests.get(f"{BACKEND_URL}/api/categories", timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                categories = data.get("categories", [])
+                categories = data.get("data", [])  # Fixed: API returns "data" not "categories"
                 if len(categories) == 12:
                     self.log_test("Blinkit2 /api/categories returns 12 categories", True)
                     return True
