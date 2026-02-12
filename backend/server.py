@@ -1,13 +1,12 @@
 import os
-import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 import jwt
@@ -19,201 +18,62 @@ MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME = os.environ.get("DB_NAME")
 JWT_SECRET = os.environ.get("JWT_SECRET")
 
-# MongoDB setup
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-# Collections
 users_col = db["users"]
-messages_col = db["messages"]
-conversations_col = db["conversations"]
+categories_col = db["categories"]
+products_col = db["products"]
+cart_col = db["cart"]
+orders_col = db["orders"]
+addresses_col = db["addresses"]
 
-# WebSocket connection manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
 
-    async def connect(self, user_id: str, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections[user_id] = websocket
-
-    def disconnect(self, user_id: str):
-        self.active_connections.pop(user_id, None)
-
-    async def send_to_user(self, user_id: str, data: dict):
-        ws = self.active_connections.get(user_id)
-        if ws:
-            try:
-                await ws.send_json(data)
-            except Exception:
-                self.disconnect(user_id)
-
-    def is_online(self, user_id: str) -> bool:
-        return user_id in self.active_connections
-
-manager = ConnectionManager()
-
-# Pydantic models
-class RegisterRequest(BaseModel):
-    username: str
+# ---- Pydantic Models ----
+class RegisterReq(BaseModel):
+    name: str
     email: str
     password: str
-    about: str = "Hey there! I am using WhatsApp"
+    mobile: str = ""
 
-class LoginRequest(BaseModel):
+class LoginReq(BaseModel):
     email: str
     password: str
 
-class SendMessageRequest(BaseModel):
-    conversation_id: str
-    content: str
-    message_type: str = "text"
+class AddToCartReq(BaseModel):
+    product_id: str
 
-class CreateConversationRequest(BaseModel):
-    participant_ids: list[str]
-    is_group: bool = False
-    group_name: Optional[str] = None
+class UpdateCartReq(BaseModel):
+    cart_item_id: str
+    quantity: int
 
-class UpdateProfileRequest(BaseModel):
-    username: Optional[str] = None
-    about: Optional[str] = None
-    avatar: Optional[str] = None
+class RemoveCartReq(BaseModel):
+    cart_item_id: str
 
-class MarkReadRequest(BaseModel):
-    conversation_id: str
+class AddressReq(BaseModel):
+    address_line: str
+    city: str
+    state: str
+    pincode: str
+    mobile: str
 
-# Seed data
-SEED_USERS = [
-    {"username": "Saswata", "email": "saswata@whatsapp2.com", "password": "password123", "avatar": "/img/109316527.jpg", "about": "Building cool stuff!"},
-    {"username": "Ananya", "email": "ananya@whatsapp2.com", "password": "password123", "avatar": "/img/girl-profile.jpg", "about": "Living my best life"},
-    {"username": "Arjun Mehta", "email": "arjun@whatsapp2.com", "password": "password123", "avatar": "/img/arjun-profile.jpg", "about": "Coffee & Code"},
-    {"username": "Priya Sharma", "email": "priya@whatsapp2.com", "password": "password123", "avatar": "/img/79feb1611dddcbce7910e0c1081df6e2.jpg", "about": "Traveler at heart"},
-    {"username": "Vikram Patel", "email": "vikram@whatsapp2.com", "password": "password123", "avatar": "/img/e5wnacz2aaaa.jpg", "about": "Foodie & Explorer"},
-    {"username": "Neha Gupta", "email": "neha@whatsapp2.com", "password": "password123", "avatar": "/img/neha-profile.jpg", "about": "Bookworm"},
-    {"username": "Amit Kumar", "email": "amit@whatsapp2.com", "password": "password123", "avatar": "/img/amit-profile.jpg", "about": "Gym & Gains"},
-    {"username": "Rohan Singh", "email": "rohan@whatsapp2.com", "password": "password123", "avatar": "/img/rohan-profile.jpg", "about": "Music is life"},
-    {"username": "Kavita Reddy", "email": "kavita@whatsapp2.com", "password": "password123", "avatar": "/img/kavita-profile.jpg", "about": "Art & Design"},
-    {"username": "Dev Team", "email": "devteam@whatsapp2.com", "password": "password123", "avatar": "/img/devteam-profile.jpg", "about": "We build things"},
-    {"username": "Sanjay Iyer", "email": "sanjay@whatsapp2.com", "password": "password123", "avatar": "/img/sanjay-profile.jpg", "about": "Photography enthusiast"},
-]
-
-SEED_MESSAGES = [
-    {"from_idx": 1, "to_idx": 0, "content": "Hey! How are you?", "minutes_ago": 120},
-    {"from_idx": 0, "to_idx": 1, "content": "I'm great! Working on a project", "minutes_ago": 118},
-    {"from_idx": 1, "to_idx": 0, "content": "That sounds exciting! What project?", "minutes_ago": 115},
-    {"from_idx": 0, "to_idx": 1, "content": "Building a WhatsApp clone 😄", "minutes_ago": 110},
-    {"from_idx": 1, "to_idx": 0, "content": "Wow that's so cool! Can I see it?", "minutes_ago": 5},
-    {"from_idx": 2, "to_idx": 0, "content": "Bro, let's meet for coffee tomorrow", "minutes_ago": 60},
-    {"from_idx": 0, "to_idx": 2, "content": "Sure! What time works?", "minutes_ago": 55},
-    {"from_idx": 2, "to_idx": 0, "content": "How about 11am at the usual place?", "minutes_ago": 50},
-    {"from_idx": 3, "to_idx": 0, "content": "Did you see the photos from the trip?", "minutes_ago": 300},
-    {"from_idx": 0, "to_idx": 3, "content": "Not yet! Send them over", "minutes_ago": 295},
-    {"from_idx": 3, "to_idx": 0, "content": "Will share on the group 📸", "minutes_ago": 290},
-    {"from_idx": 4, "to_idx": 0, "content": "Found an amazing restaurant near your place", "minutes_ago": 1440},
-    {"from_idx": 5, "to_idx": 0, "content": "Have you read the new book by Harari?", "minutes_ago": 2880},
-    {"from_idx": 6, "to_idx": 0, "content": "Gym session at 6am?", "minutes_ago": 4320},
-    {"from_idx": 7, "to_idx": 0, "content": "Check out this playlist 🎵", "minutes_ago": 5000},
-    {"from_idx": 8, "to_idx": 0, "content": "I made a new design, want feedback!", "minutes_ago": 7000},
-    {"from_idx": 9, "to_idx": 0, "content": "Sprint review at 3pm today", "minutes_ago": 8000},
-    {"from_idx": 10, "to_idx": 0, "content": "Great photos from the hackathon!", "minutes_ago": 10000},
-]
-
-
-async def seed_database():
-    existing = await users_col.count_documents({})
-    if existing > 0:
-        return
-
-    user_ids = []
-    for user_data in SEED_USERS:
-        user_id = str(uuid.uuid4())
-        hashed = bcrypt.hashpw(user_data["password"].encode(), bcrypt.gensalt()).decode()
-        await users_col.insert_one({
-            "user_id": user_id,
-            "username": user_data["username"],
-            "email": user_data["email"],
-            "password": hashed,
-            "avatar": user_data["avatar"],
-            "about": user_data["about"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "last_seen": datetime.now(timezone.utc).isoformat(),
-        })
-        user_ids.append(user_id)
-
-    # Create conversations and messages
-    for msg_data in SEED_MESSAGES:
-        from_id = user_ids[msg_data["from_idx"]]
-        to_id = user_ids[msg_data["to_idx"]]
-        sorted_ids = sorted([from_id, to_id])
-        conv_id = f"{sorted_ids[0]}_{sorted_ids[1]}"
-
-        existing_conv = await conversations_col.find_one({"conversation_id": conv_id})
-        if not existing_conv:
-            await conversations_col.insert_one({
-                "conversation_id": conv_id,
-                "is_group": False,
-                "participants": [from_id, to_id],
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-
-        msg_time = datetime.now(timezone.utc) - timedelta(minutes=msg_data["minutes_ago"])
-        msg_id = str(uuid.uuid4())
-        await messages_col.insert_one({
-            "message_id": msg_id,
-            "conversation_id": conv_id,
-            "sender_id": from_id,
-            "content": msg_data["content"],
-            "message_type": "text",
-            "created_at": msg_time.isoformat(),
-            "read_by": [from_id],
-        })
-
-    # Create indexes
-    await users_col.create_index("user_id", unique=True)
-    await users_col.create_index("email", unique=True)
-    await messages_col.create_index("conversation_id")
-    await messages_col.create_index("created_at")
-    await conversations_col.create_index("conversation_id", unique=True)
-    await conversations_col.create_index("participants")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await seed_database()
-    yield
-
-app = FastAPI(title="WhatsApp2 API", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class PlaceOrderReq(BaseModel):
+    address_id: str
+    payment_method: str = "cod"
 
 
 def create_token(user_id: str) -> str:
-    payload = {
-        "user_id": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-
+    return jwt.encode({"user_id": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET, algorithm="HS256")
 
 def verify_token(token: str) -> str:
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload["user_id"]
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
+        return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])["user_id"]
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
-
 
 async def get_current_user(authorization: str = None):
     if not authorization:
-        raise HTTPException(status_code=401, detail="Missing authorization")
+        raise HTTPException(status_code=401, detail="Missing auth")
     token = authorization.replace("Bearer ", "")
     user_id = verify_token(token)
     user = await users_col.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
@@ -222,346 +82,372 @@ async def get_current_user(authorization: str = None):
     return user
 
 
-# ---- Auth Routes ----
+# ---- Seed Data ----
+CATEGORIES = [
+    {"name": "Fruits & Vegetables", "image": "https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=200&q=80", "icon": "🥬"},
+    {"name": "Dairy & Bread", "image": "https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=200&q=80", "icon": "🥛"},
+    {"name": "Snacks & Munchies", "image": "https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=200&q=80", "icon": "🍿"},
+    {"name": "Cold Drinks & Juices", "image": "https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=200&q=80", "icon": "🥤"},
+    {"name": "Instant & Frozen Food", "image": "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=200&q=80", "icon": "🍜"},
+    {"name": "Tea, Coffee & Health Drinks", "image": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=200&q=80", "icon": "☕"},
+    {"name": "Atta, Rice & Dal", "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=200&q=80", "icon": "🌾"},
+    {"name": "Masala, Oil & More", "image": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=200&q=80", "icon": "🫙"},
+    {"name": "Sweet Tooth", "image": "https://images.unsplash.com/photo-1551024506-0bccd828d307?w=200&q=80", "icon": "🍫"},
+    {"name": "Baby Care", "image": "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=200&q=80", "icon": "👶"},
+    {"name": "Cleaning Essentials", "image": "https://images.unsplash.com/photo-1585421514738-01798e348b17?w=200&q=80", "icon": "🧹"},
+    {"name": "Personal Care", "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=200&q=80", "icon": "🧴"},
+]
+
+PRODUCTS_DATA = [
+    # Fruits & Vegetables
+    {"name": "Fresh Banana", "category_idx": 0, "price": 45, "discount": 10, "unit": "1 dozen", "stock": 100, "description": "Fresh yellow bananas, perfect for breakfast", "image": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80"},
+    {"name": "Red Apple", "category_idx": 0, "price": 180, "discount": 5, "unit": "1 kg", "stock": 80, "description": "Crisp and juicy Shimla apples", "image": "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&q=80"},
+    {"name": "Fresh Tomato", "category_idx": 0, "price": 35, "discount": 0, "unit": "500 g", "stock": 150, "description": "Farm fresh red tomatoes", "image": "https://images.unsplash.com/photo-1546470427-0d4db154ceb8?w=400&q=80"},
+    {"name": "Onion", "category_idx": 0, "price": 40, "discount": 0, "unit": "1 kg", "stock": 200, "description": "Premium quality onions", "image": "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400&q=80"},
+    {"name": "Potato", "category_idx": 0, "price": 30, "discount": 0, "unit": "1 kg", "stock": 200, "description": "Fresh potatoes for everyday cooking", "image": "https://images.unsplash.com/photo-1518977676601-b53f82ber40d?w=400&q=80"},
+    {"name": "Green Capsicum", "category_idx": 0, "price": 60, "discount": 15, "unit": "500 g", "stock": 60, "description": "Crunchy green bell peppers", "image": "https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=400&q=80"},
+    {"name": "Fresh Spinach", "category_idx": 0, "price": 25, "discount": 0, "unit": "1 bunch", "stock": 100, "description": "Organic farm fresh palak", "image": "https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=400&q=80"},
+    {"name": "Mango (Alphonso)", "category_idx": 0, "price": 350, "discount": 10, "unit": "1 kg", "stock": 40, "description": "Premium Ratnagiri Alphonso mangoes", "image": "https://images.unsplash.com/photo-1553279768-865429fa0078?w=400&q=80"},
+    # Dairy & Bread
+    {"name": "Amul Toned Milk", "category_idx": 1, "price": 30, "discount": 0, "unit": "500 ml", "stock": 200, "description": "Amul Taaza toned milk", "image": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400&q=80"},
+    {"name": "Amul Butter", "category_idx": 1, "price": 56, "discount": 5, "unit": "100 g", "stock": 120, "description": "Utterly butterly delicious", "image": "https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=400&q=80"},
+    {"name": "White Bread", "category_idx": 1, "price": 40, "discount": 0, "unit": "400 g", "stock": 80, "description": "Soft & fresh white bread", "image": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80"},
+    {"name": "Paneer (Fresh)", "category_idx": 1, "price": 90, "discount": 10, "unit": "200 g", "stock": 60, "description": "Fresh cottage cheese", "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400&q=80"},
+    {"name": "Curd (Dahi)", "category_idx": 1, "price": 35, "discount": 0, "unit": "400 g", "stock": 100, "description": "Thick and creamy curd", "image": "https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&q=80"},
+    {"name": "Cheese Slices", "category_idx": 1, "price": 120, "discount": 8, "unit": "200 g", "stock": 50, "description": "Processed cheese slices", "image": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=400&q=80"},
+    {"name": "Eggs (Pack of 6)", "category_idx": 1, "price": 48, "discount": 0, "unit": "6 pcs", "stock": 150, "description": "Farm fresh eggs", "image": "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&q=80"},
+    # Snacks & Munchies
+    {"name": "Lay's Classic Salted", "category_idx": 2, "price": 20, "discount": 0, "unit": "52 g", "stock": 200, "description": "Crispy potato chips", "image": "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&q=80"},
+    {"name": "Kurkure Masala Munch", "category_idx": 2, "price": 20, "discount": 0, "unit": "75 g", "stock": 180, "description": "Tedha hai par mera hai", "image": "https://images.unsplash.com/photo-1604335399105-a0c585fd81a1?w=400&q=80"},
+    {"name": "Haldiram's Aloo Bhujia", "category_idx": 2, "price": 85, "discount": 10, "unit": "200 g", "stock": 100, "description": "Traditional namkeen snack", "image": "https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=400&q=80"},
+    {"name": "Oreo Chocolate Cookies", "category_idx": 2, "price": 30, "discount": 0, "unit": "120 g", "stock": 150, "description": "Twist, lick, dunk!", "image": "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400&q=80"},
+    {"name": "Pringles Original", "category_idx": 2, "price": 149, "discount": 12, "unit": "165 g", "stock": 60, "description": "Once you pop you can't stop", "image": "https://images.unsplash.com/photo-1621447504864-d8686e12698c?w=400&q=80"},
+    {"name": "Dark Fantasy Choco Fills", "category_idx": 2, "price": 40, "discount": 0, "unit": "75 g", "stock": 120, "description": "Premium chocolate cookies", "image": "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=400&q=80"},
+    # Cold Drinks & Juices
+    {"name": "Coca-Cola", "category_idx": 3, "price": 40, "discount": 0, "unit": "750 ml", "stock": 200, "description": "Thanda matlab Coca-Cola", "image": "https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400&q=80"},
+    {"name": "Pepsi", "category_idx": 3, "price": 40, "discount": 0, "unit": "750 ml", "stock": 180, "description": "Yeh Dil Maange More", "image": "https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=400&q=80"},
+    {"name": "Real Mango Juice", "category_idx": 3, "price": 99, "discount": 10, "unit": "1 L", "stock": 80, "description": "100% fruit juice", "image": "https://images.unsplash.com/photo-1546173159-315724a31696?w=400&q=80"},
+    {"name": "Sprite", "category_idx": 3, "price": 40, "discount": 0, "unit": "750 ml", "stock": 150, "description": "Clear hai!", "image": "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=400&q=80"},
+    {"name": "Frooti Mango", "category_idx": 3, "price": 15, "discount": 0, "unit": "200 ml", "stock": 250, "description": "Mango Frooti, fresh n juicy", "image": "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&q=80"},
+    {"name": "Red Bull Energy", "category_idx": 3, "price": 115, "discount": 5, "unit": "250 ml", "stock": 60, "description": "Gives you wings", "image": "https://images.unsplash.com/photo-1613481205692-85ae1ebeb3a5?w=400&q=80"},
+    # Instant & Frozen Food
+    {"name": "Maggi 2-Minute Noodles", "category_idx": 4, "price": 14, "discount": 0, "unit": "70 g", "stock": 300, "description": "2-Minute Masala Noodles", "image": "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=400&q=80"},
+    {"name": "Top Ramen Curry Noodles", "category_idx": 4, "price": 15, "discount": 0, "unit": "70 g", "stock": 200, "description": "Smoodles with curry flavor", "image": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&q=80"},
+    {"name": "MTR Ready to Eat Poha", "category_idx": 4, "price": 65, "discount": 8, "unit": "180 g", "stock": 80, "description": "Just heat and eat", "image": "https://images.unsplash.com/photo-1567337710282-00832b415979?w=400&q=80"},
+    {"name": "McCain French Fries", "category_idx": 4, "price": 130, "discount": 15, "unit": "420 g", "stock": 50, "description": "Crispy golden french fries", "image": "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=400&q=80"},
+    {"name": "Cup Noodles (Mazedaar Masala)", "category_idx": 4, "price": 45, "discount": 0, "unit": "70 g", "stock": 120, "description": "On-the-go noodles", "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=400&q=80"},
+    # Tea, Coffee & Health Drinks
+    {"name": "Tata Tea Gold", "category_idx": 5, "price": 160, "discount": 5, "unit": "250 g", "stock": 100, "description": "Desh ki chai", "image": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=400&q=80"},
+    {"name": "Nescafe Classic Coffee", "category_idx": 5, "price": 195, "discount": 8, "unit": "100 g", "stock": 80, "description": "It all starts with a Nescafe", "image": "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&q=80"},
+    {"name": "Bournvita", "category_idx": 5, "price": 220, "discount": 10, "unit": "500 g", "stock": 70, "description": "Taiyari jeet ki", "image": "https://images.unsplash.com/photo-1517578239113-b03992dcdd25?w=400&q=80"},
+    {"name": "Green Tea (Lipton)", "category_idx": 5, "price": 145, "discount": 12, "unit": "25 bags", "stock": 60, "description": "Pure & light green tea", "image": "https://images.unsplash.com/photo-1556881286-fc6915169721?w=400&q=80"},
+    {"name": "Horlicks Classic Malt", "category_idx": 5, "price": 280, "discount": 8, "unit": "500 g", "stock": 50, "description": "Taller, stronger, sharper", "image": "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=400&q=80"},
+    # Atta, Rice & Dal
+    {"name": "Aashirvaad Atta", "category_idx": 6, "price": 280, "discount": 5, "unit": "5 kg", "stock": 60, "description": "100% whole wheat atta", "image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400&q=80"},
+    {"name": "India Gate Basmati Rice", "category_idx": 6, "price": 450, "discount": 10, "unit": "5 kg", "stock": 40, "description": "Premium aged basmati rice", "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80"},
+    {"name": "Toor Dal", "category_idx": 6, "price": 150, "discount": 8, "unit": "1 kg", "stock": 80, "description": "Premium arhar dal", "image": "https://images.unsplash.com/photo-1585996746418-7f563f10aabc?w=400&q=80"},
+    {"name": "Moong Dal", "category_idx": 6, "price": 130, "discount": 5, "unit": "1 kg", "stock": 70, "description": "Split green gram", "image": "https://images.unsplash.com/photo-1613743983303-b3e89f8a2b80?w=400&q=80"},
+    {"name": "Chana Dal", "category_idx": 6, "price": 110, "discount": 0, "unit": "1 kg", "stock": 90, "description": "Split chickpeas", "image": "https://images.unsplash.com/photo-1515543904851-00d9a23ebe3c?w=400&q=80"},
+    {"name": "Sooji (Semolina)", "category_idx": 6, "price": 45, "discount": 0, "unit": "500 g", "stock": 100, "description": "Fine rava for upma & halwa", "image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400&q=80"},
+    # Masala, Oil & More
+    {"name": "MDH Garam Masala", "category_idx": 7, "price": 78, "discount": 5, "unit": "100 g", "stock": 100, "description": "Asli masale sach sach", "image": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&q=80"},
+    {"name": "Fortune Sunflower Oil", "category_idx": 7, "price": 160, "discount": 10, "unit": "1 L", "stock": 80, "description": "Refined sunflower oil", "image": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80"},
+    {"name": "Tata Salt", "category_idx": 7, "price": 22, "discount": 0, "unit": "1 kg", "stock": 200, "description": "Desh ka namak", "image": "https://images.unsplash.com/photo-1518110925495-5fe2c8f2be87?w=400&q=80"},
+    {"name": "Haldi Powder", "category_idx": 7, "price": 55, "discount": 0, "unit": "100 g", "stock": 120, "description": "Pure turmeric powder", "image": "https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=400&q=80"},
+    {"name": "Red Chilli Powder", "category_idx": 7, "price": 65, "discount": 5, "unit": "100 g", "stock": 100, "description": "Premium lal mirch powder", "image": "https://images.unsplash.com/photo-1599909533408-00c7eb444a60?w=400&q=80"},
+    {"name": "Mustard Oil", "category_idx": 7, "price": 180, "discount": 8, "unit": "1 L", "stock": 60, "description": "Pure kachi ghani mustard oil", "image": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80"},
+    # Sweet Tooth
+    {"name": "Cadbury Dairy Milk", "category_idx": 8, "price": 50, "discount": 0, "unit": "50 g", "stock": 200, "description": "Kuch meetha ho jaaye", "image": "https://images.unsplash.com/photo-1587132137056-bfbf0166836e?w=400&q=80"},
+    {"name": "KitKat", "category_idx": 8, "price": 30, "discount": 0, "unit": "37.3 g", "stock": 180, "description": "Have a break, have a KitKat", "image": "https://images.unsplash.com/photo-1582176604856-e824b4736522?w=400&q=80"},
+    {"name": "Gulab Jamun (Haldiram's)", "category_idx": 8, "price": 99, "discount": 10, "unit": "500 g", "stock": 60, "description": "Ready to eat gulab jamun", "image": "https://images.unsplash.com/photo-1666190059674-796c4fa2ab09?w=400&q=80"},
+    {"name": "Rasgulla (Bikaji)", "category_idx": 8, "price": 120, "discount": 5, "unit": "500 g", "stock": 50, "description": "Soft spongy rasgulla", "image": "https://images.unsplash.com/photo-1643364054688-4e4a25a0d399?w=400&q=80"},
+    {"name": "5 Star Chocolate", "category_idx": 8, "price": 20, "discount": 0, "unit": "40 g", "stock": 200, "description": "Jo khaye kho jaaye", "image": "https://images.unsplash.com/photo-1575377427642-087cf684f29d?w=400&q=80"},
+    # Baby Care
+    {"name": "Pampers Diapers (S)", "category_idx": 9, "price": 399, "discount": 15, "unit": "Pack of 22", "stock": 30, "description": "All night dryness", "image": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400&q=80"},
+    {"name": "Cerelac Baby Food", "category_idx": 9, "price": 255, "discount": 10, "unit": "300 g", "stock": 40, "description": "Stage 1 wheat apple", "image": "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&q=80"},
+    {"name": "Johnson's Baby Soap", "category_idx": 9, "price": 65, "discount": 0, "unit": "100 g", "stock": 80, "description": "Gentle for baby skin", "image": "https://images.unsplash.com/photo-1585232004423-244e0e6904e3?w=400&q=80"},
+    # Cleaning Essentials
+    {"name": "Vim Dishwash Gel", "category_idx": 10, "price": 99, "discount": 10, "unit": "500 ml", "stock": 100, "description": "99.9% germ kill", "image": "https://images.unsplash.com/photo-1585232004423-244e0e6904e3?w=400&q=80"},
+    {"name": "Harpic Toilet Cleaner", "category_idx": 10, "price": 85, "discount": 5, "unit": "500 ml", "stock": 80, "description": "10x better cleaning", "image": "https://images.unsplash.com/photo-1585421514738-01798e348b17?w=400&q=80"},
+    {"name": "Surf Excel Matic", "category_idx": 10, "price": 245, "discount": 12, "unit": "1 kg", "stock": 60, "description": "Tough stain removal", "image": "https://images.unsplash.com/photo-1610557892470-55d9e80c0bce?w=400&q=80"},
+    # Personal Care
+    {"name": "Dove Soap", "category_idx": 11, "price": 55, "discount": 0, "unit": "100 g", "stock": 120, "description": "1/4 moisturising cream", "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&q=80"},
+    {"name": "Colgate MaxFresh", "category_idx": 11, "price": 95, "discount": 8, "unit": "150 g", "stock": 100, "description": "Cooling crystal toothpaste", "image": "https://images.unsplash.com/photo-1559304787-e8b067e0b0c4?w=400&q=80"},
+    {"name": "Head & Shoulders Shampoo", "category_idx": 11, "price": 190, "discount": 10, "unit": "340 ml", "stock": 70, "description": "Anti-dandruff shampoo", "image": "https://images.unsplash.com/photo-1631729371254-42c2892f0e6e?w=400&q=80"},
+    {"name": "Nivea Body Lotion", "category_idx": 11, "price": 220, "discount": 12, "unit": "400 ml", "stock": 50, "description": "48H moisture care", "image": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400&q=80"},
+]
+
+
+async def seed_database():
+    existing = await categories_col.count_documents({})
+    if existing > 0:
+        return
+
+    cat_ids = []
+    for cat_data in CATEGORIES:
+        cat_id = str(uuid.uuid4())
+        await categories_col.insert_one({
+            "category_id": cat_id,
+            "name": cat_data["name"],
+            "image": cat_data["image"],
+            "icon": cat_data["icon"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        cat_ids.append(cat_id)
+
+    for prod_data in PRODUCTS_DATA:
+        prod_id = str(uuid.uuid4())
+        cat_idx = prod_data["category_idx"]
+        await products_col.insert_one({
+            "product_id": prod_id,
+            "name": prod_data["name"],
+            "category_id": cat_ids[cat_idx],
+            "category_name": CATEGORIES[cat_idx]["name"],
+            "price": prod_data["price"],
+            "discount": prod_data["discount"],
+            "unit": prod_data["unit"],
+            "stock": prod_data["stock"],
+            "description": prod_data["description"],
+            "image": prod_data["image"],
+            "publish": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Seed a demo user
+    hashed = bcrypt.hashpw("password123".encode(), bcrypt.gensalt()).decode()
+    await users_col.insert_one({
+        "user_id": str(uuid.uuid4()),
+        "name": "Demo User",
+        "email": "demo@blinkit2.com",
+        "password": hashed,
+        "mobile": "9876543210",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await users_col.create_index("user_id", unique=True)
+    await users_col.create_index("email", unique=True)
+    await products_col.create_index("product_id", unique=True)
+    await products_col.create_index("category_id")
+    await products_col.create_index([("name", "text"), ("description", "text")])
+    await categories_col.create_index("category_id", unique=True)
+    await cart_col.create_index("user_id")
+    await orders_col.create_index("user_id")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await seed_database()
+    yield
+
+app = FastAPI(title="Blinkit2 API", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+
+# ---- Auth ----
 @app.post("/api/auth/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterReq):
     existing = await users_col.find_one({"email": req.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-
     user_id = str(uuid.uuid4())
     hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
     await users_col.insert_one({
-        "user_id": user_id,
-        "username": req.username,
-        "email": req.email,
-        "password": hashed,
-        "avatar": "",
-        "about": req.about,
+        "user_id": user_id, "name": req.name, "email": req.email,
+        "password": hashed, "mobile": req.mobile,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "last_seen": datetime.now(timezone.utc).isoformat(),
     })
-
     token = create_token(user_id)
-    return {"token": token, "user_id": user_id, "username": req.username}
-
+    return {"token": token, "user_id": user_id, "name": req.name}
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginReq):
     user = await users_col.find_one({"email": req.email})
-    if not user:
+    if not user or not bcrypt.checkpw(req.password.encode(), user["password"].encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    if not bcrypt.checkpw(req.password.encode(), user["password"].encode()):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
     token = create_token(user["user_id"])
-    return {
-        "token": token,
-        "user_id": user["user_id"],
-        "username": user["username"],
-        "avatar": user.get("avatar", ""),
-        "about": user.get("about", ""),
-    }
-
+    return {"token": token, "user_id": user["user_id"], "name": user["name"], "email": user["email"]}
 
 @app.get("/api/auth/me")
 async def get_me(authorization: str = Query(None)):
+    return await get_current_user(authorization)
+
+
+# ---- Categories ----
+@app.get("/api/categories")
+async def get_categories():
+    cats = await categories_col.find({}, {"_id": 0}).to_list(100)
+    return {"data": cats}
+
+
+# ---- Products ----
+@app.get("/api/products")
+async def get_products(category_id: str = None, search: str = None, page: int = 1, limit: int = 20):
+    query = {"publish": True}
+    if category_id:
+        query["category_id"] = category_id
+    if search:
+        query["$text"] = {"$search": search}
+    skip = (page - 1) * limit
+    products = await products_col.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await products_col.count_documents(query)
+    return {"data": products, "total": total, "page": page, "pages": -(-total // limit)}
+
+@app.get("/api/products/{product_id}")
+async def get_product(product_id: str):
+    prod = await products_col.find_one({"product_id": product_id}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return prod
+
+@app.get("/api/products/category/{category_id}")
+async def get_products_by_category(category_id: str, limit: int = 15):
+    products = await products_col.find({"category_id": category_id, "publish": True}, {"_id": 0}).limit(limit).to_list(limit)
+    return {"data": products}
+
+
+# ---- Cart ----
+@app.get("/api/cart")
+async def get_cart(authorization: str = Query(None)):
     user = await get_current_user(authorization)
-    return user
+    items = await cart_col.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)
+    enriched = []
+    for item in items:
+        product = await products_col.find_one({"product_id": item["product_id"]}, {"_id": 0})
+        if product:
+            enriched.append({**item, "product": product})
+    return {"data": enriched}
 
-
-# ---- Users Routes ----
-@app.get("/api/users")
-async def get_users(authorization: str = Query(None)):
+@app.post("/api/cart/add")
+async def add_to_cart(req: AddToCartReq, authorization: str = Query(None)):
     user = await get_current_user(authorization)
-    all_users = await users_col.find(
-        {"user_id": {"$ne": user["user_id"]}},
-        {"_id": 0, "password": 0}
-    ).to_list(100)
-
-    for u in all_users:
-        u["is_online"] = manager.is_online(u["user_id"])
-
-    return all_users
-
-
-@app.get("/api/users/{user_id}")
-async def get_user(user_id: str):
-    user = await users_col.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user["is_online"] = manager.is_online(user_id)
-    return user
-
-
-@app.put("/api/users/profile")
-async def update_profile(req: UpdateProfileRequest, authorization: str = Query(None)):
-    user = await get_current_user(authorization)
-    update_data = {}
-    if req.username:
-        update_data["username"] = req.username
-    if req.about is not None:
-        update_data["about"] = req.about
-    if req.avatar is not None:
-        update_data["avatar"] = req.avatar
-    if update_data:
-        await users_col.update_one({"user_id": user["user_id"]}, {"$set": update_data})
-    return {"status": "updated"}
-
-
-# ---- Conversation Routes ----
-@app.get("/api/conversations")
-async def get_conversations(authorization: str = Query(None)):
-    user = await get_current_user(authorization)
-    user_id = user["user_id"]
-
-    convs = await conversations_col.find(
-        {"participants": user_id},
-        {"_id": 0}
-    ).to_list(100)
-
-    result = []
-    for conv in convs:
-        last_msg = await messages_col.find_one(
-            {"conversation_id": conv["conversation_id"]},
-            {"_id": 0},
-            sort=[("created_at", -1)]
+    existing = await cart_col.find_one({"user_id": user["user_id"], "product_id": req.product_id})
+    if existing:
+        await cart_col.update_one(
+            {"user_id": user["user_id"], "product_id": req.product_id},
+            {"$inc": {"quantity": 1}}
         )
+        return {"message": "Quantity updated"}
+    cart_item_id = str(uuid.uuid4())
+    await cart_col.insert_one({
+        "cart_item_id": cart_item_id,
+        "user_id": user["user_id"],
+        "product_id": req.product_id,
+        "quantity": 1,
+    })
+    return {"message": "Added to cart", "cart_item_id": cart_item_id}
 
-        unread = await messages_col.count_documents({
-            "conversation_id": conv["conversation_id"],
-            "sender_id": {"$ne": user_id},
-            "read_by": {"$nin": [user_id]}
-        })
+@app.put("/api/cart/update")
+async def update_cart(req: UpdateCartReq, authorization: str = Query(None)):
+    user = await get_current_user(authorization)
+    if req.quantity <= 0:
+        await cart_col.delete_one({"cart_item_id": req.cart_item_id, "user_id": user["user_id"]})
+        return {"message": "Item removed"}
+    await cart_col.update_one(
+        {"cart_item_id": req.cart_item_id, "user_id": user["user_id"]},
+        {"$set": {"quantity": req.quantity}}
+    )
+    return {"message": "Cart updated"}
 
-        other_participants = []
-        for pid in conv["participants"]:
-            if pid != user_id:
-                p = await users_col.find_one({"user_id": pid}, {"_id": 0, "password": 0})
-                if p:
-                    p["is_online"] = manager.is_online(pid)
-                    other_participants.append(p)
+@app.delete("/api/cart/remove")
+async def remove_from_cart(req: RemoveCartReq, authorization: str = Query(None)):
+    user = await get_current_user(authorization)
+    await cart_col.delete_one({"cart_item_id": req.cart_item_id, "user_id": user["user_id"]})
+    return {"message": "Removed from cart"}
 
-        result.append({
-            "conversation_id": conv["conversation_id"],
-            "is_group": conv.get("is_group", False),
-            "group_name": conv.get("group_name"),
-            "participants": other_participants,
-            "last_message": last_msg,
-            "unread_count": unread,
-            "created_at": conv.get("created_at"),
-        })
-
-    result.sort(key=lambda x: x["last_message"]["created_at"] if x["last_message"] else "", reverse=True)
-    return result
+@app.delete("/api/cart/clear")
+async def clear_cart(authorization: str = Query(None)):
+    user = await get_current_user(authorization)
+    await cart_col.delete_many({"user_id": user["user_id"]})
+    return {"message": "Cart cleared"}
 
 
-@app.post("/api/conversations")
-async def create_conversation(req: CreateConversationRequest, authorization: str = Query(None)):
+# ---- Address ----
+@app.get("/api/addresses")
+async def get_addresses(authorization: str = Query(None)):
+    user = await get_current_user(authorization)
+    addrs = await addresses_col.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(20)
+    return {"data": addrs}
+
+@app.post("/api/addresses")
+async def add_address(req: AddressReq, authorization: str = Query(None)):
+    user = await get_current_user(authorization)
+    addr_id = str(uuid.uuid4())
+    await addresses_col.insert_one({
+        "address_id": addr_id,
+        "user_id": user["user_id"],
+        "address_line": req.address_line,
+        "city": req.city,
+        "state": req.state,
+        "pincode": req.pincode,
+        "mobile": req.mobile,
+    })
+    return {"message": "Address added", "address_id": addr_id}
+
+
+# ---- Orders ----
+@app.post("/api/orders")
+async def place_order(req: PlaceOrderReq, authorization: str = Query(None)):
     user = await get_current_user(authorization)
     user_id = user["user_id"]
 
-    all_participants = list(set([user_id] + req.participant_ids))
+    cart_items = await cart_col.find({"user_id": user_id}).to_list(100)
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty")
 
-    if not req.is_group and len(all_participants) == 2:
-        sorted_ids = sorted(all_participants)
-        conv_id = f"{sorted_ids[0]}_{sorted_ids[1]}"
-        existing = await conversations_col.find_one({"conversation_id": conv_id})
-        if existing:
-            return {"conversation_id": conv_id}
-    else:
-        conv_id = str(uuid.uuid4())
+    items = []
+    subtotal = 0
+    for ci in cart_items:
+        prod = await products_col.find_one({"product_id": ci["product_id"]}, {"_id": 0})
+        if prod:
+            price = prod["price"]
+            if prod.get("discount"):
+                price = round(price * (1 - prod["discount"] / 100))
+            item_total = price * ci["quantity"]
+            subtotal += item_total
+            items.append({
+                "product_id": prod["product_id"],
+                "name": prod["name"],
+                "image": prod["image"],
+                "price": price,
+                "quantity": ci["quantity"],
+                "unit": prod["unit"],
+                "total": item_total,
+            })
 
-    await conversations_col.insert_one({
-        "conversation_id": conv_id,
-        "is_group": req.is_group,
-        "group_name": req.group_name,
-        "participants": all_participants,
+    delivery_fee = 0 if subtotal >= 199 else 25
+    total = subtotal + delivery_fee
+    order_id = f"BK2-{str(uuid.uuid4())[:8].upper()}"
+
+    await orders_col.insert_one({
+        "order_id": order_id,
+        "user_id": user_id,
+        "items": items,
+        "address_id": req.address_id,
+        "payment_method": req.payment_method,
+        "subtotal": subtotal,
+        "delivery_fee": delivery_fee,
+        "total": total,
+        "status": "confirmed",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "estimated_delivery": "10 minutes",
     })
 
-    return {"conversation_id": conv_id}
-
-
-# ---- Messages Routes ----
-@app.get("/api/messages/{conversation_id}")
-async def get_messages(conversation_id: str, limit: int = 50, before: str = None, authorization: str = Query(None)):
-    user = await get_current_user(authorization)
-
-    query = {"conversation_id": conversation_id}
-    if before:
-        query["created_at"] = {"$lt": before}
-
-    msgs = await messages_col.find(
-        query,
-        {"_id": 0}
-    ).sort("created_at", -1).limit(limit).to_list(limit)
-
-    msgs.reverse()
-    return msgs
-
-
-@app.post("/api/messages")
-async def send_message(req: SendMessageRequest, authorization: str = Query(None)):
-    user = await get_current_user(authorization)
-    user_id = user["user_id"]
-
-    conv = await conversations_col.find_one({"conversation_id": req.conversation_id})
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    if user_id not in conv["participants"]:
-        raise HTTPException(status_code=403, detail="Not a participant")
-
-    msg_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-
-    message_doc = {
-        "message_id": msg_id,
-        "conversation_id": req.conversation_id,
-        "sender_id": user_id,
-        "content": req.content,
-        "message_type": req.message_type,
-        "created_at": now,
-        "read_by": [user_id],
-    }
-
-    await messages_col.insert_one(message_doc)
-
-    # Broadcast to other participants
-    broadcast_data = {
-        "type": "new_message",
-        "message_id": msg_id,
-        "conversation_id": req.conversation_id,
-        "sender_id": user_id,
-        "sender_name": user.get("username", ""),
-        "sender_avatar": user.get("avatar", ""),
-        "content": req.content,
-        "message_type": req.message_type,
-        "created_at": now,
-        "read_by": [user_id],
-    }
-
-    for pid in conv["participants"]:
-        if pid != user_id:
-            await manager.send_to_user(pid, broadcast_data)
+    await cart_col.delete_many({"user_id": user_id})
 
     return {
-        "message_id": msg_id,
-        "conversation_id": req.conversation_id,
-        "sender_id": user_id,
-        "content": req.content,
-        "message_type": req.message_type,
-        "created_at": now,
-        "read_by": [user_id],
+        "message": "Order placed successfully!",
+        "order_id": order_id,
+        "total": total,
+        "estimated_delivery": "10 minutes",
     }
 
-
-@app.post("/api/messages/read")
-async def mark_messages_read(req: MarkReadRequest, authorization: str = Query(None)):
+@app.get("/api/orders")
+async def get_orders(authorization: str = Query(None)):
     user = await get_current_user(authorization)
-    user_id = user["user_id"]
-
-    result = await messages_col.update_many(
-        {
-            "conversation_id": req.conversation_id,
-            "sender_id": {"$ne": user_id},
-            "read_by": {"$nin": [user_id]}
-        },
-        {"$addToSet": {"read_by": user_id}}
-    )
-
-    # Notify sender that messages are read
-    conv = await conversations_col.find_one({"conversation_id": req.conversation_id})
-    if conv:
-        for pid in conv["participants"]:
-            if pid != user_id:
-                await manager.send_to_user(pid, {
-                    "type": "messages_read",
-                    "conversation_id": req.conversation_id,
-                    "read_by": user_id,
-                })
-
-    return {"modified": result.modified_count}
-
-
-# ---- WebSocket ----
-@app.websocket("/api/ws/{token}")
-async def websocket_endpoint(websocket: WebSocket, token: str):
-    try:
-        user_id = verify_token(token)
-    except Exception:
-        await websocket.close(code=4001)
-        return
-
-    await manager.connect(user_id, websocket)
-
-    # Update last seen
-    await users_col.update_one(
-        {"user_id": user_id},
-        {"$set": {"last_seen": datetime.now(timezone.utc).isoformat()}}
-    )
-
-    # Broadcast online status
-    user = await users_col.find_one({"user_id": user_id}, {"_id": 0, "password": 0})
-    convs = await conversations_col.find({"participants": user_id}).to_list(100)
-    online_peers = set()
-    for conv in convs:
-        for pid in conv["participants"]:
-            if pid != user_id:
-                online_peers.add(pid)
-
-    for pid in online_peers:
-        await manager.send_to_user(pid, {
-            "type": "user_online",
-            "user_id": user_id,
-        })
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            msg = json.loads(data)
-
-            if msg.get("type") == "typing":
-                conv = await conversations_col.find_one({"conversation_id": msg["conversation_id"]})
-                if conv:
-                    for pid in conv["participants"]:
-                        if pid != user_id:
-                            await manager.send_to_user(pid, {
-                                "type": "typing",
-                                "conversation_id": msg["conversation_id"],
-                                "user_id": user_id,
-                            })
-
-            elif msg.get("type") == "stop_typing":
-                conv = await conversations_col.find_one({"conversation_id": msg["conversation_id"]})
-                if conv:
-                    for pid in conv["participants"]:
-                        if pid != user_id:
-                            await manager.send_to_user(pid, {
-                                "type": "stop_typing",
-                                "conversation_id": msg["conversation_id"],
-                                "user_id": user_id,
-                            })
-
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
-    finally:
-        manager.disconnect(user_id)
-        await users_col.update_one(
-            {"user_id": user_id},
-            {"$set": {"last_seen": datetime.now(timezone.utc).isoformat()}}
-        )
-        for pid in online_peers:
-            await manager.send_to_user(pid, {
-                "type": "user_offline",
-                "user_id": user_id,
-            })
+    ords = await orders_col.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return {"data": ords}
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "app": "WhatsApp2"}
+    return {"status": "ok", "app": "Blinkit2"}
