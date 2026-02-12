@@ -337,6 +337,11 @@
   position: relative;
 }
 
+.wa-messages-area > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Message Bubbles */
 .wa-msg-row {
   display: flex;
