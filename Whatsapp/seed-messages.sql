@@ -1,7 +1,51 @@
--- Seed messages for all chats between user1 and user3–user11
+-- Seed messages for all chats between user1 and user2–user11
 -- Each chat has messages from both sides
 -- The LAST message in each chat is from the OTHER user (received msg for user1)
--- user1 ↔ user2 (Ananya) is left empty — that's the live chat
+
+-- user1 ↔ user2 (Ananya) — main GF chat
+insert into public.chats (conversation_id, sender_id, content, created_at) values
+  ('user1-user2-chat', 'user1', 'Hi , my girl . Kya haal chaal', now() - interval '5 hours 30 minutes'),
+  ('user1-user2-chat', 'user2', 'Haye mera hero… Main theek hoon. Tum batao?', now() - interval '5 hours 28 minutes'),
+  ('user1-user2-chat', 'user1', 'Work is important but not more important than you. Any plans for tonight?', now() - interval '5 hours 25 minutes'),
+  ('user1-user2-chat', 'user2', 'Maybe late night call? Agar main saamne hoti toh kya karte?', now() - interval '5 hours 22 minutes'),
+  ('user1-user2-chat', 'user1', 'Are you flirting?', now() - interval '5 hours 20 minutes'),
+  ('user1-user2-chat', 'user2', 'Thoda sa flirt toh banta hai.', now() - interval '5 hours 18 minutes'),
+  ('user1-user2-chat', 'user1', 'I love it, it gives me butterflies.', now() - interval '5 hours 15 minutes'),
+  ('user1-user2-chat', 'user2', 'Butterflies? Main blush mode mein hoon.', now() - interval '5 hours 12 minutes'),
+  ('user1-user2-chat', 'user1', 'Wanna go out tonight?', now() - interval '5 hours 10 minutes'),
+  ('user1-user2-chat', 'user2', 'Always ready.', now() - interval '5 hours 8 minutes'),
+  ('user1-user2-chat', 'user1', 'Should I order chocolates for you?', now() - interval '5 hours 5 minutes'),
+  ('user1-user2-chat', 'user2', 'I was craving chocolates.', now() - interval '5 hours 3 minutes'),
+  ('user1-user2-chat', 'user1', 'Order kar diya, gate pe aa jayega.', now() - interval '5 hours'),
+  ('user1-user2-chat', 'user2', 'You are so sweet.', now() - interval '4 hours 58 minutes'),
+  ('user1-user2-chat', 'user1', 'You are my spoiled girl.', now() - interval '4 hours 55 minutes'),
+  ('user1-user2-chat', 'user2', 'Bas tumhari hi hoon.', now() - interval '4 hours 52 minutes'),
+  ('user1-user2-chat', 'user1', 'Avinash ki party achi thi?', now() - interval '4 hours 50 minutes'),
+  ('user1-user2-chat', 'user2', 'Tumhare bina boring.', now() - interval '4 hours 48 minutes'),
+  ('user1-user2-chat', 'user1', 'Office busy tha, startup pressure hai.', now() - interval '4 hours 45 minutes'),
+  ('user1-user2-chat', 'user2', 'Thoda time mujhe bhi invest karo.', now() - interval '4 hours 42 minutes'),
+  ('user1-user2-chat', 'user1', 'Funding bhi laani hai, team lead bhi karna hai.', now() - interval '4 hours 40 minutes'),
+  ('user1-user2-chat', 'user2', 'Proud of you.', now() - interval '4 hours 38 minutes'),
+  ('user1-user2-chat', 'user1', 'Office competitive hai.', now() - interval '4 hours 35 minutes'),
+  ('user1-user2-chat', 'user2', 'Tum shine karoge.', now() - interval '4 hours 32 minutes'),
+  ('user1-user2-chat', 'user1', 'Tum possessive ho jaati ho.', now() - interval '4 hours 30 minutes'),
+  ('user1-user2-chat', 'user2', 'Par main tumhari safe space hoon.', now() - interval '4 hours 28 minutes'),
+  ('user1-user2-chat', 'user1', 'Thank you meri jaan.', now() - interval '4 hours 25 minutes'),
+  ('user1-user2-chat', 'user2', 'Always meri jaan.', now() - interval '4 hours 22 minutes'),
+  ('user1-user2-chat', 'user1', 'Lakho ladkiya marti hain mujhpe.', now() - interval '4 hours 20 minutes'),
+  ('user1-user2-chat', 'user2', 'But tum mere ho.', now() - interval '4 hours 18 minutes'),
+  ('user1-user2-chat', 'user1', 'Valentine plan?', now() - interval '4 hours 15 minutes'),
+  ('user1-user2-chat', 'user2', 'Simple, just us.', now() - interval '4 hours 12 minutes'),
+  ('user1-user2-chat', 'user1', 'Steak house booked.', now() - interval '4 hours 10 minutes'),
+  ('user1-user2-chat', 'user2', 'Excited.', now() - interval '4 hours 8 minutes'),
+  ('user1-user2-chat', 'user1', 'Assignment pending hai?', now() - interval '4 hours 5 minutes'),
+  ('user1-user2-chat', 'user2', 'Haan.', now() - interval '4 hours 3 minutes'),
+  ('user1-user2-chat', 'user1', 'Start working, baad mein baat karte hain.', now() - interval '4 hours'),
+  ('user1-user2-chat', 'user2', 'Late night call pakka.', now() - interval '3 hours 58 minutes'),
+  ('user1-user2-chat', 'user1', 'I love you meri jaan.', now() - interval '3 hours 55 minutes'),
+  ('user1-user2-chat', 'user2', 'I love when you say jaan.', now() - interval '3 hours 52 minutes'),
+  ('user1-user2-chat', 'user1', 'Haan meri jaan.', now() - interval '3 hours 50 minutes'),
+  ('user1-user2-chat', 'user2', 'Dil soft ho jaata hai.', now() - interval '3 hours 48 minutes');
 
 -- user1 ↔ user3 (Arjun Mehta)
 insert into public.chats (conversation_id, sender_id, content, created_at) values

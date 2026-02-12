@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabaseClient";
 import Auth from "./components/Auth";
 
@@ -126,6 +126,7 @@ export default function Home() {
   const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [readChats, setReadChats] = useState<Record<string, boolean>>({});
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Filter out the logged-in user from the contacts list
   const contacts = ALL_CONTACTS.filter((c) => c.id !== userId);
@@ -225,6 +226,11 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [userId, conversationId]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Fetch last message previews and unread counts on same 2s cycle
   useEffect(() => {
@@ -465,6 +471,7 @@ export default function Home() {
                 )
               )
             )}
+            <div ref={messagesEndRef} />
           </div>
           <div className="convebottom">
             <div className="tools">
