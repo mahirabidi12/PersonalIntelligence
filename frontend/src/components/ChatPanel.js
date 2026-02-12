@@ -129,7 +129,11 @@ export default function ChatPanel({
       </div>
 
       {/* Messages */}
-      <div className="wa-messages-area" data-testid="messages-area">
+      <div className="wa-messages-area" data-testid="messages-area" style={{
+        backgroundImage: `url(${process.env.PUBLIC_URL}/img/bg-chat-tile-dark_a4be512e7195b6b733d9110b408f075d.png)`,
+        backgroundRepeat: 'repeat',
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,234,226,0.92)', pointerEvents: 'none', zIndex: 0 }} />
         {messages.map((msg, idx) => {
           const isSent = msg.sender_id === currentUser?.user_id;
           const showTail = shouldShowTail(messages, idx);
