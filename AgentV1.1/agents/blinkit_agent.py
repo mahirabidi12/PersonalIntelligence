@@ -2,8 +2,8 @@ import asyncio
 import json
 import logging
 
-from browser_use import Agent, Browser
-from langchain_openai import ChatOpenAI
+from browser_use import Agent, BrowserSession
+from browser_use.llm.models import ChatOpenAI
 
 from agents.base_agent import BaseAgent
 from config import config
@@ -21,8 +21,8 @@ class BlinkItAgent(BaseAgent):
     adds to cart, and checks out via COD.
     """
 
-    def __init__(self, browser: Browser, event_bus: EventBus, memory: Memory, intent_detector: IntentDetector):
-        super().__init__("BlinkItAgent", browser, event_bus, memory)
+    def __init__(self, browser_session: BrowserSession, event_bus: EventBus, memory: Memory, intent_detector: IntentDetector):
+        super().__init__("BlinkItAgent", browser_session, event_bus, memory)
         self.intent_detector = intent_detector
         self.llm = ChatOpenAI(model=config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
 
@@ -95,16 +95,18 @@ class BlinkItAgent(BaseAgent):
             Go to {config.BLINKIT_URL}
 
             IMPORTANT: You MUST login first before doing anything else.
-            1. Look for a "Login" or "Sign In" link/button and click it.
-            2. Enter email: "{config.BLINKIT_EMAIL}"
-            3. Enter password: "{config.BLINKIT_PASSWORD}"
-            4. Click the submit/login button.
-            5. Wait for the home page to fully load after login.
+            1. Look for the "Login" button in the header and click it. It will take you to the login page.
+            2. You will see two fields: "Email :" and "Password :".
+            3. Enter email: "{config.BLINKIT_EMAIL}" in the "Enter your email" field.
+            4. Enter password: "{config.BLINKIT_PASSWORD}" in the "Enter your password" field.
+            5. Click the green "Login" submit button.
+            6. Wait for the home page to fully load after login.
 
-            If you are already logged in (you can see products or a user profile), skip login.
+            If you are already logged in (you can see products or an "Account" dropdown), skip login.
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         await login_agent.run()
         await self.log("navigate_login", config.BLINKIT_URL)
@@ -114,14 +116,15 @@ class BlinkItAgent(BaseAgent):
         """Search for the requested item. Wait 5s after typing for results to load."""
         search_agent = Agent(
             task=f"""
-            On the current page, find the search bar or search input field.
+            On the current page, find the search bar (it has placeholder text like "Search for kitkat and more.").
             Click on it and type "{item}".
-            Then press Enter or click the search button to search.
+            Then press Enter to search.
             IMPORTANT: After searching, WAIT and do nothing for a few seconds — the search results take time to load.
-            Do NOT click anything until product results are visible on the page.
+            Do NOT click anything until product cards are visible on the page.
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         await search_agent.run()
 
@@ -143,7 +146,8 @@ class BlinkItAgent(BaseAgent):
             If no products are visible, return an empty array: []
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         result = await extract_agent.run()
         result_text = result.final_result() if hasattr(result, 'final_result') else str(result)
@@ -185,11 +189,12 @@ class BlinkItAgent(BaseAgent):
         cart_agent = Agent(
             task=f"""
             Find the product named "{product_name}" (or the closest match) in the product listings.
-            Click on it to view its details.
-            Then click the "Add to Cart" button (or similar button like "Add", "+", "Buy Now").
+            Click the green "Add" button on that product card to add it to cart.
+            Do NOT click on the product itself — just click the "Add" button directly.
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         await cart_agent.run()
         await self.log("add_to_cart", product_name)
@@ -200,20 +205,20 @@ class BlinkItAgent(BaseAgent):
         # Step B: Go to cart and checkout
         checkout_agent = Agent(
             task=f"""
-            Now go to the shopping cart. Look for a cart icon, "Cart" button, or "View Cart" link.
+            Now go to the shopping cart. Look for the green cart button in the top-right header (it shows item count and price, or says "My Cart").
             Click on it to open the cart.
 
             In the cart:
             1. Verify the item is there
-            2. Click "Proceed to Checkout" or "Checkout" button
-            3. DO NOT try to add a new address. Use whatever address is already saved, or skip the address step if possible.
-            4. For payment method: ALWAYS select "Cash on Delivery" or "COD". Do NOT choose online payment, Stripe, or card payment.
-            5. Click "Place Order" or "Confirm Order" to finalize
-
-            Wait for the order confirmation page.
+            2. Click the green "Proceed" button at the bottom of the cart
+            3. On the checkout page, you will see your address on the left and a summary on the right.
+            4. DO NOT try to add a new address. Use whatever address is already shown.
+            5. For payment: click the "Cash on Delivery" button (the one with green border). Do NOT click "Online Payment".
+            6. Wait for the order confirmation.
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         await checkout_agent.run()
         await self.log("checkout", product_name)

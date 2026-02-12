@@ -9,7 +9,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 class Config:
     # LLM
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-5.2")
 
     # Deployed app URLs
     WHATSAPP_URL: str = os.getenv("WHATSAPP_URL", "https://whatsapp-rl-clone.vercel.app/")

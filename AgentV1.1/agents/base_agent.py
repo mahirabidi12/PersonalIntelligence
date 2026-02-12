@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 
-from browser_use import Browser
+from browser_use import BrowserSession
 
 from core.memory import Memory
 from events.bus import EventBus
@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class BaseAgent(ABC):
     """Abstract base class for all agents."""
 
-    def __init__(self, name: str, browser: Browser, event_bus: EventBus, memory: Memory):
+    def __init__(self, name: str, browser_session: BrowserSession, event_bus: EventBus, memory: Memory):
         self.name = name
-        self.browser = browser
+        self.browser_session = browser_session
         self.event_bus = event_bus
         self.memory = memory
         self.status: str = "idle"

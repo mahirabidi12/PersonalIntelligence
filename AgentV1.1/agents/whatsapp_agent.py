@@ -2,8 +2,8 @@ import asyncio
 import json
 import logging
 
-from browser_use import Agent, Browser
-from langchain_openai import ChatOpenAI
+from browser_use import Agent, BrowserSession
+from browser_use.llm.models import ChatOpenAI
 
 from agents.base_agent import BaseAgent
 from config import config
@@ -24,8 +24,8 @@ class WhatsAppAgent(BaseAgent):
     - Publishes ORDER_REQUESTED when food craving detected
     """
 
-    def __init__(self, browser: Browser, event_bus: EventBus, memory: Memory, intent_detector: IntentDetector):
-        super().__init__("WhatsAppAgent", browser, event_bus, memory)
+    def __init__(self, browser_session: BrowserSession, event_bus: EventBus, memory: Memory, intent_detector: IntentDetector):
+        super().__init__("WhatsAppAgent", browser_session, event_bus, memory)
         self.intent_detector = intent_detector
         self.llm = ChatOpenAI(model=config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
         self.last_message_count = 0
@@ -58,35 +58,20 @@ class WhatsAppAgent(BaseAgent):
         """Navigate to WhatsApp, login as agent user, open target contact chat."""
         self.set_status("running", "Setting up WhatsApp")
 
-        # Step 1: Navigate and select user
-        # The WhatsApp clone uses user IDs (user1, user2...) for the radio buttons,
-        # with display names like "Saswata (User 1)" shown as labels
+        # Single setup agent: navigate, select user, and open target contact
         setup_agent = Agent(
             task=f"""
             Go to {config.WHATSAPP_URL}
-            You will see a user selection screen with radio buttons for different users.
-            Find and select the user "{config.WHATSAPP_AGENT_USER}" (their user ID is "{config.WHATSAPP_USER_ID}").
-            Click on their radio button to select them.
-            Then click the "Start Chatting" button to enter the chat.
+            You will see a "Pick a User" screen with radio buttons. Select "{config.WHATSAPP_AGENT_USER}" (the one labeled "User 1" or "{config.WHATSAPP_USER_ID}").
+            Click the "Enter Chat" button to log in.
+            Then in the contacts list on the left, find and click on "{config.WHATSAPP_TARGET_CONTACT}".
             """,
             llm=self.llm,
-            browser=self.browser,
+            browser_session=self.browser_session,
+            use_judge=False,
         )
         await setup_agent.run()
-        await self.log("setup", "Navigated to WhatsApp and selected user")
-
-        # Step 2: Click on target contact
-        await asyncio.sleep(2)  # Wait for chat interface to load
-        contact_agent = Agent(
-            task=f"""
-            In the left sidebar / contact list, find and click on the contact named "{config.WHATSAPP_TARGET_CONTACT}".
-            This will open the conversation with them.
-            """,
-            llm=self.llm,
-            browser=self.browser,
-        )
-        await contact_agent.run()
-        await self.log("setup", f"Opened chat with {config.WHATSAPP_TARGET_CONTACT}")
+        await self.log("setup", f"Navigated to WhatsApp and opened chat with {config.WHATSAPP_TARGET_CONTACT}")
 
         logger.info(f"[WhatsAppAgent] Setup complete. Chatting as {config.WHATSAPP_AGENT_USER} with {config.WHATSAPP_TARGET_CONTACT}")
 
@@ -116,14 +101,15 @@ class WhatsAppAgent(BaseAgent):
 
                     await self.log(
                         "intent_detected",
-                        json.dumps({"messages": [m.content for m in new_messages]}),
+                        json.dumps({"messages": new_messages}),
                         json.dumps({"intent": intent_result.intent, "reply": intent_result.reply, "item": intent_result.item}),
                     )
 
-                    # Send reply
+                    # Send reply (strip newlines to avoid sending multiple messages)
                     if intent_result.reply:
-                        await self._send_message(intent_result.reply)
-                        await self.memory.save_message("agent", intent_result.reply, config.WHATSAPP_AGENT_USER)
+                        reply_text = intent_result.reply.replace("\n", " ").strip()
+                        await self._send_message(reply_text)
+                        await self.memory.save_message("agent", reply_text, config.WHATSAPP_AGENT_USER)
 
                     # If food intent, publish order event
                     if intent_result.intent == "order_food" and intent_result.item:
@@ -140,15 +126,17 @@ class WhatsAppAgent(BaseAgent):
         """Use browser-use to extract messages and find new ones."""
         try:
             extract_agent = Agent(
-                task="""
-                Look at the chat conversation area (the main message area, not the sidebar).
-                Extract ALL visible messages as a JSON array.
-                Each message should have: "sender" (the name of who sent it) and "text" (the message content).
+                task=f"""
+                Look at the OPEN CHAT conversation only (the right-side message area, NOT the left sidebar contact list).
+                Extract ONLY the last 5 messages from this conversation as a JSON array.
+                Each message should have "sender" (either "{config.WHATSAPP_AGENT_USER}" or "{config.WHATSAPP_TARGET_CONTACT}") and "text".
+                IGNORE the sidebar contact previews completely.
                 Return ONLY the JSON array, nothing else.
-                Example: [{"sender": "Saswata", "text": "hello"}, {"sender": "Ananya", "text": "hi!"}]
+                Example: [{{"sender": "{config.WHATSAPP_AGENT_USER}", "text": "hello"}}, {{"sender": "{config.WHATSAPP_TARGET_CONTACT}", "text": "hi!"}}]
                 """,
                 llm=self.llm,
-                browser=self.browser,
+                browser_session=self.browser_session,
+                use_judge=False,
             )
             result = await extract_agent.run()
 
@@ -180,26 +168,45 @@ class WhatsAppAgent(BaseAgent):
         """Try to parse JSON message array from browser-use output."""
         if not text:
             return []
+
+        # Clean up: strip whitespace, remove markdown code fences, remove judge notes
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned.rsplit("```", 1)[0]
+        # Remove simple judge appended text like "\n\n[Simple judge: ...]"
+        if "\n\n[Simple judge:" in cleaned:
+            cleaned = cleaned.split("\n\n[Simple judge:")[0]
+        cleaned = cleaned.strip()
+
+        # Try direct JSON parse
         try:
-            # Try direct JSON parse
-            data = json.loads(text)
+            data = json.loads(cleaned)
             if isinstance(data, list):
                 return data
         except json.JSONDecodeError:
             pass
 
-        # Try to find JSON array in the text
-        try:
-            start = text.find("[")
-            end = text.rfind("]") + 1
-            if start >= 0 and end > start:
-                data = json.loads(text[start:end])
-                if isinstance(data, list):
-                    return data
-        except (json.JSONDecodeError, ValueError):
-            pass
+        # Find the JSON array by matching brackets from the first [
+        start = cleaned.find("[")
+        if start >= 0:
+            depth = 0
+            for i in range(start, len(cleaned)):
+                if cleaned[i] == "[":
+                    depth += 1
+                elif cleaned[i] == "]":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            data = json.loads(cleaned[start:i + 1])
+                            if isinstance(data, list):
+                                return data
+                        except json.JSONDecodeError:
+                            pass
+                        break
 
-        logger.warning(f"[WhatsAppAgent] Could not parse messages from: {text[:200]}")
+        logger.warning(f"[WhatsAppAgent] Could not parse messages (len={len(text)}): {text[:300]}")
         return []
 
     async def _send_message(self, text: str):
@@ -213,7 +220,8 @@ class WhatsAppAgent(BaseAgent):
                 Then press Enter or click the Send button to send the message.
                 """,
                 llm=self.llm,
-                browser=self.browser,
+                browser_session=self.browser_session,
+                use_judge=False,
             )
             await send_agent.run()
             logger.info(f"[WhatsAppAgent] Sent message: {text}")
