@@ -13,10 +13,10 @@ class Config:
 
     # App URLs (our deployed clones)
     WHATSAPP_URL: str = os.getenv(
-        "WHATSAPP_URL", "https://7dcd99ce-af52-4298-9cbb-20dfd53c19b9.preview.emergentagent.com"
+        "WHATSAPP_URL", "https://browser-agent-8.preview.emergentagent.com"
     )
     BLINKIT_URL: str = os.getenv(
-        "BLINKIT_URL", "https://7dcd99ce-af52-4298-9cbb-20dfd53c19b9.preview.emergentagent.com"
+        "BLINKIT_URL", "https://browser-agent-8.preview.emergentagent.com"
     )
 
     # WhatsApp agent config

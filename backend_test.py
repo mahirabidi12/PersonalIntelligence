@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Get backend URL from frontend .env
-BACKEND_URL = "https://chat-messenger-app-7.preview.emergentagent.com"
+BACKEND_URL = "https://browser-agent-8.preview.emergentagent.com"
 
 class BackendTester:
     def __init__(self):
