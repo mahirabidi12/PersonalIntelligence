@@ -1,0 +1,143 @@
+{
+  "project_name": "whatsApp2",
+  "design_philosophy": {
+    "identity": "Pixel-Perfect WhatsApp Clone",
+    "core_principles": [
+      "Utilitarian Density: High information density, minimal padding",
+      "Native Feel: System fonts, standard OS interactions",
+      "Speed: Instant feedback, no layout shifts",
+      "Classic Aesthetic: The specific requested Green/Beige theme"
+    ],
+    "mood": "Reliable, Fast, Global, Connected"
+  },
+  "typography": {
+    "font_family_primary": "Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif",
+    "scale": {
+      "xs": "11px",
+      "sm": "13px",
+      "base": "14.2px",
+      "lg": "16px",
+      "xl": "19px",
+      "2xl": "24px",
+      "3xl": "28px"
+    },
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600
+    },
+    "line_heights": {
+      "tight": "1.2",
+      "normal": "1.4",
+      "relaxed": "1.6"
+    }
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#00a884",
+      "dark": "#008f6f",
+      "foreground": "#ffffff"
+    },
+    "background": {
+      "default": "#eae6df",
+      "paper": "#ffffff",
+      "sidebar": "#ffffff",
+      "chat_panel": "#efeae2"
+    },
+    "headers": {
+      "default": "#00a884",
+      "surface": "#00a884"
+    },
+    "text": {
+      "primary": "#111b21",
+      "secondary": "#667781",
+      "timestamp": "#667781",
+      "system": "#8696a0"
+    },
+    "chat": {
+      "bubble_in": "#ffffff",
+      "bubble_out": "#d9fdd3",
+      "bubble_out_hover": "#d9fdd3",
+      "check_read": "#53bdeb",
+      "check_sent": "#8696a0"
+    },
+    "status": {
+      "online": "#25d366",
+      "offline": "#d1d5db"
+    },
+    "divider": "#e9edef"
+  },
+  "layout": {
+    "sidebar_width": "400px",
+    "header_height": "60px",
+    "app_max_width": "1600px",
+    "z_indices": {
+      "base": 0,
+      "dropdown": 50,
+      "sticky": 100,
+      "modal": 1000,
+      "tooltip": 1100
+    }
+  },
+  "components": {
+    "Avatar": {
+      "variants": {
+        "sm": "h-8 w-8",
+        "md": "h-10 w-10",
+        "lg": "h-12 w-12",
+        "xl": "h-20 w-20"
+      },
+      "radius": "rounded-full"
+    },
+    "Button": {
+      "variants": {
+        "icon": "p-2 hover:bg-black/10 rounded-full transition-colors",
+        "primary": "bg-[#00a884] hover:bg-[#008f6f] text-white px-6 py-2 rounded-[3px] font-medium uppercase text-sm tracking-wide shadow-sm"
+      }
+    },
+    "Input": {
+      "style": "bg-[#f0f2f5] rounded-lg px-4 py-2 text-[15px] placeholder-[#667781] focus:outline-none focus:ring-1 focus:ring-[#00a884] w-full"
+    }
+  },
+  "assets": {
+    "chat_background_pattern": "https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png",
+    "default_avatar": "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+  },
+  "image_urls": {
+    "avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1595436222774-4b1cd819aada?auto=format&fit=crop&w=150&q=80",
+        "category": "user_avatar",
+        "description": "Professional woman"
+      },
+      {
+        "url": "https://images.unsplash.com/flagged/photo-1564831394734-8af8badeaf5b?auto=format&fit=crop&w=150&q=80",
+        "category": "user_avatar",
+        "description": "Professional man"
+      },
+      {
+         "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+         "category": "user_avatar",
+         "description": "Smiling man"
+      },
+       {
+         "url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+         "category": "user_avatar",
+         "description": "Smiling woman"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Use the hex codes provided exactly. Do not improvise colors.",
+    "Implement the 'Double Tick' logic: Gray (Sent), Blue (Read).",
+    "The Sidebar must be fixed width (approx 400px) on large screens, taking 100% on mobile.",
+    "Use the provided 'chat_background_pattern' as a tiled background image for the chat area with opacity 0.4 on top of the beige background (#efeae2).",
+    "Headers: The user requested 'Green Header'. Apply bg-[#00a884] to the top strip of the Sidebar AND the Chat Window. Text icons in header should be white.",
+    "Ensure the Message Input bar stays at the bottom of the chat window.",
+    "Use 'react-icons' (Material Design icons preferably, e.g., MdMoreVert, MdSearch, MdAttachFile) to match WhatsApp style.",
+    "Sidebar Contact List: Must show Name (Top), Last Message (Bottom, truncated), Time (Right), Unread Badge (Green circle).",
+    "Chat Bubbles: Use SVG shapes or CSS `clip-path` / `border-radius` tricks to create the 'tail' on the bubbles.",
+    "Incoming: White bubble, tail on left. Outgoing: Light Green (#d9fdd3), tail on right."
+  ]
+}
