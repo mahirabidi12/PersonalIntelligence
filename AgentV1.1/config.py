@@ -11,6 +11,10 @@ class Config:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-5.2")
 
+    # Supabase (WhatsApp clone DB)
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+
     # Deployed app URLs
     WHATSAPP_URL: str = os.getenv("WHATSAPP_URL", "https://whatsapp-rl-clone.vercel.app/")
     BLINKIT_URL: str = os.getenv("BLINKIT_URL", "https://binkeyit-full-stack-ydrn.vercel.app/")
@@ -19,6 +23,7 @@ class Config:
     WHATSAPP_USER_ID: str = os.getenv("WHATSAPP_USER_ID", "user1")  # The login ID (user1, user2, etc.)
     WHATSAPP_AGENT_USER: str = os.getenv("WHATSAPP_AGENT_USER", "Saswata")  # Display name
     WHATSAPP_TARGET_CONTACT: str = os.getenv("WHATSAPP_TARGET_CONTACT", "Ananya")
+    WHATSAPP_TARGET_ID: str = os.getenv("WHATSAPP_TARGET_ID", "user2")  # Target's login ID
 
     # BlinkeyIt login credentials
     BLINKIT_EMAIL: str = os.getenv("BLINKIT_EMAIL", "agent@test.com")

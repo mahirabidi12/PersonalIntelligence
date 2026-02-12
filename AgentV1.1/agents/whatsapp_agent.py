@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 
+from supabase import create_client
+
 from browser_use import Agent, BrowserSession
 from browser_use.llm.models import ChatOpenAI
 
@@ -18,20 +20,29 @@ logger = logging.getLogger(__name__)
 class WhatsAppAgent(BaseAgent):
     """
     WhatsApp chat agent. Runs continuously:
-    - Polls the WhatsApp clone UI for new messages
+    - Polls Supabase directly for new messages (no browser scraping)
     - Sends messages to LLM for intent detection
-    - Replies as the girlfriend persona
+    - Replies by inserting into Supabase (instant, no browser agent)
     - Publishes ORDER_REQUESTED when food craving detected
+    - Browser is only used for initial setup (login + open chat) so user can watch
     """
 
     def __init__(self, browser_session: BrowserSession, event_bus: EventBus, memory: Memory, intent_detector: IntentDetector):
         super().__init__("WhatsAppAgent", browser_session, event_bus, memory)
         self.intent_detector = intent_detector
         self.llm = ChatOpenAI(model=config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
-        self.last_message_count = 0
-        self.last_messages: list[str] = []
         self._running = False
         self._pending_notifications: list[str] = []
+
+        # Supabase client for direct DB access
+        self.supabase = create_client(config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
+
+        # Conversation ID: sorted user IDs + "-chat"
+        ids = sorted([config.WHATSAPP_USER_ID, config.WHATSAPP_TARGET_ID])
+        self.conversation_id = f"{ids[0]}-{ids[1]}-chat"
+
+        # Track the last message timestamp we've seen to detect new ones
+        self._last_seen_ts: str | None = None
 
         # Subscribe to order events
         self.event_bus.subscribe("ORDER_COMPLETED", self._on_order_completed)
@@ -58,7 +69,7 @@ class WhatsAppAgent(BaseAgent):
         """Navigate to WhatsApp, login as agent user, open target contact chat."""
         self.set_status("running", "Setting up WhatsApp")
 
-        # Single setup agent: navigate, select user, and open target contact
+        # Browser setup: navigate, select user, and open target contact (visual only)
         setup_agent = Agent(
             task=f"""
             Go to {config.WHATSAPP_URL}
@@ -73,27 +84,92 @@ class WhatsAppAgent(BaseAgent):
         await setup_agent.run()
         await self.log("setup", f"Navigated to WhatsApp and opened chat with {config.WHATSAPP_TARGET_CONTACT}")
 
+        # Load last 5 messages into memory for context, and reply if latest is from Ananya
+        await self._bootstrap_conversation()
+
         logger.info(f"[WhatsAppAgent] Setup complete. Chatting as {config.WHATSAPP_AGENT_USER} with {config.WHATSAPP_TARGET_CONTACT}")
+        logger.info(f"[WhatsAppAgent] Conversation ID: {self.conversation_id}")
+        logger.info(f"[WhatsAppAgent] Using Supabase for message read/write (no browser scraping)")
+
+    async def _bootstrap_conversation(self):
+        """Load last 5 messages into memory. If the latest is from the target, reply immediately."""
+        result = (
+            self.supabase.table("chats")
+            .select("sender_id, content, created_at")
+            .eq("conversation_id", self.conversation_id)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+
+        if not result.data:
+            self._last_seen_ts = None
+            logger.info("[WhatsAppAgent] No existing messages in conversation")
+            return
+
+        # Messages come newest-first, reverse for chronological order
+        messages = list(reversed(result.data))
+
+        # Save all 5 into memory for LLM context
+        for msg in messages:
+            sender_id = msg["sender_id"]
+            if sender_id == config.WHATSAPP_TARGET_ID:
+                role = "user"
+                name = config.WHATSAPP_TARGET_CONTACT
+            else:
+                role = "agent"
+                name = config.WHATSAPP_AGENT_USER
+            await self.memory.save_message(role, msg["content"], name)
+
+        # Set last_seen_ts to the latest message timestamp
+        self._last_seen_ts = messages[-1]["created_at"]
+        logger.info(f"[WhatsAppAgent] Loaded {len(messages)} messages into memory")
+        logger.info(f"[WhatsAppAgent] Last message timestamp: {self._last_seen_ts}")
+
+        # If the latest message is from the target contact, reply now
+        latest = messages[-1]
+        if latest["sender_id"] == config.WHATSAPP_TARGET_ID:
+            logger.info(f"[WhatsAppAgent] Latest message is from {config.WHATSAPP_TARGET_CONTACT}: \"{latest['content']}\" — replying immediately")
+
+            recent = await self.memory.get_recent_messages(limit=20)
+            intent_result = await self.intent_detector.detect(recent)
+
+            await self.log(
+                "intent_detected",
+                json.dumps({"messages": [latest["content"]]}),
+                json.dumps({"intent": intent_result.intent, "reply": intent_result.reply, "item": intent_result.item}),
+            )
+
+            if intent_result.reply:
+                reply_text = intent_result.reply.replace("\n", " ").strip()
+                await self._send_message(reply_text)
+                await self.memory.save_message("agent", reply_text, config.WHATSAPP_AGENT_USER)
+
+            if intent_result.intent == "order_food" and intent_result.item:
+                await self.event_bus.publish("ORDER_REQUESTED", {"item": intent_result.item})
+                logger.info(f"[WhatsAppAgent] Published ORDER_REQUESTED for: {intent_result.item}")
+        else:
+            logger.info(f"[WhatsAppAgent] Latest message is from us — waiting for {config.WHATSAPP_TARGET_CONTACT}")
 
     async def run(self):
-        """Main polling loop: check for new messages, detect intent, reply."""
+        """Main polling loop: check Supabase for new messages, detect intent, reply."""
         self._running = True
-        self.set_status("running", "Polling for messages")
+        self.set_status("running", "Polling for messages via Supabase")
 
         while self._running:
             try:
                 # Send any pending notifications first
                 await self._send_pending_notifications()
 
-                # Extract current messages from the chat UI
+                # Check Supabase for new messages from target contact
                 new_messages = await self._check_for_new_messages()
 
                 if new_messages:
-                    logger.info(f"[WhatsAppAgent] Found {len(new_messages)} new message(s)")
+                    logger.info(f"[WhatsAppAgent] Found {len(new_messages)} new message(s) from {config.WHATSAPP_TARGET_CONTACT}")
 
                     # Save new messages to memory
-                    for msg in new_messages:
-                        await self.memory.save_message("user", msg, config.WHATSAPP_TARGET_CONTACT)
+                    for msg_text in new_messages:
+                        await self.memory.save_message("user", msg_text, config.WHATSAPP_TARGET_CONTACT)
 
                     # Get full conversation context and detect intent
                     recent = await self.memory.get_recent_messages(limit=20)
@@ -105,7 +181,7 @@ class WhatsAppAgent(BaseAgent):
                         json.dumps({"intent": intent_result.intent, "reply": intent_result.reply, "item": intent_result.item}),
                     )
 
-                    # Send reply (strip newlines to avoid sending multiple messages)
+                    # Send reply via Supabase insert
                     if intent_result.reply:
                         reply_text = intent_result.reply.replace("\n", " ").strip()
                         await self._send_message(reply_text)
@@ -123,94 +199,38 @@ class WhatsAppAgent(BaseAgent):
             await asyncio.sleep(config.POLL_INTERVAL)
 
     async def _check_for_new_messages(self) -> list[str]:
-        """Use browser-use to extract messages and find new ones."""
+        """Query Supabase for new messages from the target contact since last check."""
         try:
-            extract_agent = Agent(
-                task=f"""
-                Look at the OPEN CHAT conversation only (the right-side message area, NOT the left sidebar contact list).
-                Extract ONLY the last 5 messages from this conversation as a JSON array.
-                Each message should have "sender" (either "{config.WHATSAPP_AGENT_USER}" or "{config.WHATSAPP_TARGET_CONTACT}") and "text".
-                IGNORE the sidebar contact previews completely.
-                Return ONLY the JSON array, nothing else.
-                Example: [{{"sender": "{config.WHATSAPP_AGENT_USER}", "text": "hello"}}, {{"sender": "{config.WHATSAPP_TARGET_CONTACT}", "text": "hi!"}}]
-                """,
-                llm=self.llm,
-                browser_session=self.browser_session,
-                use_judge=False,
+            query = (
+                self.supabase.table("chats")
+                .select("content, created_at")
+                .eq("conversation_id", self.conversation_id)
+                .eq("sender_id", config.WHATSAPP_TARGET_ID)
+                .order("created_at", desc=False)
+                .limit(10)
             )
-            result = await extract_agent.run()
 
-            # Parse the result - browser-use returns AgentHistoryList
-            result_text = result.final_result() if hasattr(result, 'final_result') else str(result)
+            # Only get messages newer than our last snapshot
+            if self._last_seen_ts:
+                query = query.gt("created_at", self._last_seen_ts)
 
-            # Try to extract JSON from the result
-            messages = self._parse_messages(result_text)
+            result = query.execute()
 
-            # Find new messages by comparing with what we've seen
-            new_messages = []
-            current_texts = [m.get("text", "") for m in messages]
+            if not result.data:
+                return []
 
-            for msg in messages:
-                text = msg.get("text", "").strip()
-                sender = msg.get("sender", "").strip()
-                # Only consider messages from the target contact that we haven't seen
-                if text and sender == config.WHATSAPP_TARGET_CONTACT and text not in self.last_messages:
-                    new_messages.append(text)
+            # Update timestamp to the latest message we just fetched
+            self._last_seen_ts = result.data[-1]["created_at"]
 
-            self.last_messages = current_texts
+            new_messages = [row["content"] for row in result.data]
             return new_messages
 
         except Exception as e:
-            logger.error(f"[WhatsAppAgent] Failed to extract messages: {e}")
+            logger.error(f"[WhatsAppAgent] Supabase query failed: {e}")
             return []
-
-    def _parse_messages(self, text: str) -> list[dict]:
-        """Try to parse JSON message array from browser-use output."""
-        if not text:
-            return []
-
-        # Clean up: strip whitespace, remove markdown code fences, remove judge notes
-        cleaned = text.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[-1]
-        if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("```", 1)[0]
-        # Remove simple judge appended text like "\n\n[Simple judge: ...]"
-        if "\n\n[Simple judge:" in cleaned:
-            cleaned = cleaned.split("\n\n[Simple judge:")[0]
-        cleaned = cleaned.strip()
-
-        # Try direct JSON parse
-        try:
-            data = json.loads(cleaned)
-            if isinstance(data, list):
-                return data
-        except json.JSONDecodeError:
-            pass
-
-        # Find the JSON array by matching brackets from the first [
-        start = cleaned.find("[")
-        if start >= 0:
-            depth = 0
-            for i in range(start, len(cleaned)):
-                if cleaned[i] == "[":
-                    depth += 1
-                elif cleaned[i] == "]":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            data = json.loads(cleaned[start:i + 1])
-                            if isinstance(data, list):
-                                return data
-                        except json.JSONDecodeError:
-                            pass
-                        break
-
-        logger.warning(f"[WhatsAppAgent] Could not parse messages (len={len(text)}): {text[:300]}")
-        return []
 
     async def _send_message(self, text: str):
-        """Use browser-use to type and send a message."""
+        """Type and send message via the browser UI so the user can watch it happen."""
         try:
             send_agent = Agent(
                 task=f"""
@@ -224,7 +244,7 @@ class WhatsAppAgent(BaseAgent):
                 use_judge=False,
             )
             await send_agent.run()
-            logger.info(f"[WhatsAppAgent] Sent message: {text}")
+            logger.info(f"[WhatsAppAgent] Sent via UI: {text}")
             await self.log("send_message", text)
         except Exception as e:
             logger.error(f"[WhatsAppAgent] Failed to send message: {e}")
