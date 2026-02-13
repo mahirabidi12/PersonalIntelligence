@@ -1,0 +1,221 @@
+
+================================================================================
+SESSION START | 2026-02-13 03:32:12 | run:c3ad29ba
+================================================================================
+[run:c3ad29ba] 2026-02-13 03:32:12.692 | Orchestrator | EVENT | Session starting | run_id=c3ad29ba
+2026-02-13 03:32:12.704 | WhatsAppAgent | NAVIGATE | Opening WhatsApp at https://whatsapp-rl-clone.vercel.app/
+2026-02-13 03:32:12.704 | WhatsAppAgent | OBSERVE | Looking for 'Pick a User' screen with radio buttons
+2026-02-13 03:33:25.462 | WhatsAppAgent | CLICK | Selected user 'Saswata' from radio buttons
+2026-02-13 03:33:25.462 | WhatsAppAgent | CLICK | Clicked 'Enter Chat' button to login
+2026-02-13 03:33:25.463 | WhatsAppAgent | OBSERVE | Scanning contacts list on left sidebar for 'Ananya'
+2026-02-13 03:33:25.463 | WhatsAppAgent | CLICK | Clicked on contact 'Ananya' to open chat
+2026-02-13 03:33:25.466 | WhatsAppAgent | EXTRACT | Fetching last 5 messages from Supabase for conversation context
+2026-02-13 03:33:25.600 | WhatsAppAgent | EXTRACT | Loaded 5 messages into memory for context
+2026-02-13 03:33:25.600 | WhatsAppAgent | RECEIVE | Latest message is from Ananya | content="Haan pending hai"
+2026-02-13 03:33:25.601 | WhatsAppAgent | REASON | Sending conversation to LLM for intent detection
+2026-02-13 03:33:25.601 | IntentDetector | REASON | Analyzing 5 messages for intent | last_message="Haan pending hai"
+2026-02-13 03:33:27.407 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Alright meri jaan, start working on it. Baad mein baat karte hain. I'm here if y"
+2026-02-13 03:33:27.407 | WhatsAppAgent | DECIDE | Intent classified as 'normal_chat' | confidence=1.0, item=None
+2026-02-13 03:33:27.410 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:33:51.267 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:33:51.267 | WhatsAppAgent | TYPE | Typed message into input field | text="Alright meri jaan, start working on it. Baad mein baat karte hain. I'm here if you need help."
+2026-02-13 03:33:51.267 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:33:51.267 | WhatsAppAgent | SEND | Message sent to Ananya | content="Alright meri jaan, start working on it. Baad mein baat karte hain. I'm here if you need help."
+[run:c3ad29ba] 2026-02-13 03:33:51.270 | Orchestrator | EVENT | All agents initialized and running | whatsapp_target=Ananya
+2026-02-13 03:33:51.270 | WhatsAppAgent | EVENT | Starting message polling loop | interval=5s
+2026-02-13 03:33:51.343 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Well you always motivate me"
+2026-02-13 03:33:51.345 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=7
+2026-02-13 03:33:51.345 | IntentDetector | REASON | Analyzing 7 messages for intent | last_message="Well you always motivate me"
+2026-02-13 03:33:52.630 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="That's what I'm here for, meri jaan. Proud of you!"
+2026-02-13 03:33:52.631 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=50
+2026-02-13 03:33:52.633 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:34:17.667 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:34:17.667 | WhatsAppAgent | TYPE | Typed message into input field | text="That's what I'm here for, meri jaan. Proud of you!"
+2026-02-13 03:34:17.667 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:34:17.667 | WhatsAppAgent | SEND | Message sent to Ananya | content="That's what I'm here for, meri jaan. Proud of you!"
+2026-02-13 03:34:22.743 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Do you wanna grab dinner tonight"
+2026-02-13 03:34:22.747 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=9
+2026-02-13 03:34:22.747 | IntentDetector | REASON | Analyzing 9 messages for intent | last_message="Do you wanna grab dinner tonight"
+2026-02-13 03:34:25.009 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Haan, let's do it. Steak house toh booked hai hi. Excited to see you, meri jaan!"
+2026-02-13 03:34:25.009 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=80
+2026-02-13 03:34:25.013 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:34:59.865 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:34:59.866 | WhatsAppAgent | TYPE | Typed message into input field | text="Haan, let's do it. Steak house toh booked hai hi. Excited to see you, meri jaan!"
+2026-02-13 03:34:59.866 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:34:59.866 | WhatsAppAgent | SEND | Message sent to Ananya | content="Haan, let's do it. Steak house toh booked hai hi. Excited to see you, meri jaan!"
+2026-02-13 03:35:04.955 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Dinner me toh time hain , I am craving for chocolate right now"
+2026-02-13 03:35:04.960 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=11
+2026-02-13 03:35:04.960 | IntentDetector | REASON | Analyzing 11 messages for intent | last_message="Dinner me toh time hain , I am craving for chocolate right now"
+2026-02-13 03:35:07.063 | IntentDetector | DECIDE | Classified intent as 'order_food' | confidence=1.0, reply="Awww, chocolate craving! Ruk kuch karta hoon tere liye. 😘"
+2026-02-13 03:35:07.064 | IntentDetector | REASON | Food craving detected: 'chocolate' | price_cap=₹500
+2026-02-13 03:35:07.065 | WhatsAppAgent | DECIDE | Intent: 'order_food' | confidence=1.0, item=chocolate, reply_length=57
+2026-02-13 03:35:07.068 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:35:33.861 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:35:33.862 | WhatsAppAgent | TYPE | Typed message into input field | text="Awww, chocolate craving! Ruk kuch karta hoon tere liye. 😘"
+2026-02-13 03:35:33.862 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:35:33.862 | WhatsAppAgent | SEND | Message sent to Ananya | content="Awww, chocolate craving! Ruk kuch karta hoon tere liye. 😘"
+2026-02-13 03:35:33.866 | WhatsAppAgent | EVENT | Food craving detected, publishing ORDER_REQUESTED | item='chocolate'
+[run:c3ad29ba] 2026-02-13 03:35:33.866 | Orchestrator | EVENT | Spawning BlinkItAgent to order 'chocolate' | opening separate browser session
+2026-02-13 03:35:33.874 | BlinkItAgent | EVENT | Starting order flow for 'chocolate'
+2026-02-13 03:35:33.874 | BlinkItAgent | NAVIGATE | Opening BlinkeyIt at https://binkeyit-full-stack-ydrn.vercel.app/
+2026-02-13 03:35:33.874 | BlinkItAgent | OBSERVE | Looking for 'Login' button in header
+2026-02-13 03:35:38.935 | WhatsAppAgent | RECEIVE | New message from Ananya | content="What exactly are you planning?"
+2026-02-13 03:35:38.939 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=13
+2026-02-13 03:35:38.940 | IntentDetector | REASON | Analyzing 13 messages for intent | last_message="What exactly are you planning?"
+2026-02-13 03:35:40.474 | IntentDetector | DECIDE | Classified intent as 'order_food' | confidence=1.0, reply="Surprise hai meri girl, wait and watch! 😉"
+2026-02-13 03:35:40.475 | IntentDetector | REASON | Food craving detected: 'chocolate' | price_cap=₹500
+2026-02-13 03:35:40.475 | WhatsAppAgent | DECIDE | Intent: 'order_food' | confidence=1.0, item=chocolate, reply_length=41
+2026-02-13 03:35:40.478 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:36:01.368 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:36:01.369 | WhatsAppAgent | TYPE | Typed message into input field | text="Surprise hai meri girl, wait and watch! 😉"
+2026-02-13 03:36:01.369 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:36:01.369 | WhatsAppAgent | SEND | Message sent to Ananya | content="Surprise hai meri girl, wait and watch! 😉"
+2026-02-13 03:36:06.439 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Aww , thank you . But I can buy stuff for myself . You don't have to spend your hard earned money on me. But the way how are your manager , Naman zaada raat ko kaam toh nhi kra rha"
+2026-02-13 03:36:06.443 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=15
+2026-02-13 03:36:06.443 | IntentDetector | REASON | Analyzing 15 messages for intent | last_message="Aww , thank you . But I can buy stuff for myself . You don't have to spend your hard earned money on"
+2026-02-13 03:36:08.303 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Naman se baat kar loonga, don't worry. Aur tum pe paisa kharch karna toh mere li"
+2026-02-13 03:36:08.304 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=129
+2026-02-13 03:36:08.307 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:36:33.979 | BlinkItAgent | CLICK | Clicked 'Login' button in header
+2026-02-13 03:36:33.979 | BlinkItAgent | OBSERVE | Found email and password input fields on login page
+2026-02-13 03:36:33.980 | BlinkItAgent | TYPE | Entered email into 'Enter your email' field
+2026-02-13 03:36:33.980 | BlinkItAgent | TYPE | Entered password into 'Enter your password' field
+2026-02-13 03:36:33.980 | BlinkItAgent | CLICK | Clicked green 'Login' submit button
+2026-02-13 03:36:33.980 | BlinkItAgent | WAIT | Waiting for home page to load after login
+2026-02-13 03:36:33.984 | BlinkItAgent | OBSERVE | Looking for search bar at top of page | placeholder='Search for atta dal and more.'
+2026-02-13 03:36:36.440 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:36:36.440 | WhatsAppAgent | TYPE | Typed message into input field | text="Naman se baat kar loonga, don't worry. Aur tum pe paisa kharch karna toh mere liye khushi ki baat hai, my girl. You deserve it! 😘"
+2026-02-13 03:36:36.441 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:36:36.441 | WhatsAppAgent | SEND | Message sent to Ananya | content="Naman se baat kar loonga, don't worry. Aur tum pe paisa kharch karna toh mere liye khushi ki baat hai, my girl. You deserve it! 😘"
+2026-02-13 03:36:41.509 | WhatsAppAgent | RECEIVE | New message from Ananya | content="And tauseef , does he still wants you to be the team lead?"
+2026-02-13 03:36:41.513 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=17
+2026-02-13 03:36:41.513 | IntentDetector | REASON | Analyzing 17 messages for intent | last_message="And tauseef , does he still wants you to be the team lead?"
+2026-02-13 03:36:43.123 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Haan, Tauseef chahte hain main team lead banoon. Pressure toh hai, but it's exci"
+2026-02-13 03:36:43.123 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=132
+2026-02-13 03:36:43.126 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:37:07.375 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:37:07.375 | WhatsAppAgent | TYPE | Typed message into input field | text="Haan, Tauseef chahte hain main team lead banoon. Pressure toh hai, but it's exciting too! Tumhare support se sab manage ho jayega. 😊"
+2026-02-13 03:37:07.376 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:37:07.376 | WhatsAppAgent | SEND | Message sent to Ananya | content="Haan, Tauseef chahte hain main team lead banoon. Pressure toh hai, but it's exciting too! Tumhare support se sab manage ho jayega. 😊"
+2026-02-13 03:37:22.586 | WhatsAppAgent | RECEIVE | New message from Ananya | content="True , my support is worth it 😉"
+2026-02-13 03:37:22.590 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=19
+2026-02-13 03:37:22.591 | IntentDetector | REASON | Analyzing 19 messages for intent | last_message="True , my support is worth it 😉"
+2026-02-13 03:37:24.229 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Bilkul meri jaan, tumhara support meri strength hai. 😊 Aur main hamesha grateful"
+2026-02-13 03:37:24.230 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=99
+2026-02-13 03:37:24.233 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:37:24.924 | BlinkItAgent | CLICK | Clicked on search input field to focus it
+2026-02-13 03:37:24.924 | BlinkItAgent | TYPE | Typed 'chocolate' into search bar
+2026-02-13 03:37:24.924 | BlinkItAgent | SEARCH | Pressed Enter to search for 'chocolate'
+2026-02-13 03:37:24.924 | BlinkItAgent | WAIT | Waiting 5s for search results to render | looking for product cards with images, names, prices, green 'Add' buttons
+2026-02-13 03:37:29.930 | BlinkItAgent | OBSERVE | Scanning page for product listing cards in search results
+2026-02-13 03:37:47.144 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:37:47.144 | WhatsAppAgent | TYPE | Typed message into input field | text="Bilkul meri jaan, tumhara support meri strength hai. 😊 Aur main hamesha grateful hoon tumhare liye!"
+2026-02-13 03:37:47.144 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:37:47.144 | WhatsAppAgent | SEND | Message sent to Ananya | content="Bilkul meri jaan, tumhara support meri strength hai. 😊 Aur main hamesha grateful hoon tumhare liye!"
+2026-02-13 03:37:57.290 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Well thank you , you do the same for me"
+2026-02-13 03:37:57.295 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:37:57.295 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="Well thank you , you do the same for me"
+2026-02-13 03:37:58.973 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Always here for you, meri jaan. Tum sabse special ho mere liye! 😘"
+2026-02-13 03:37:58.973 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=65
+2026-02-13 03:37:58.975 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:38:20.947 | BlinkItAgent | EXTRACT | Extracted 10 product options from page | products=[Nescafe Choco Mocha Cold Coffee (₹397.00), Nescafe Gold Choco Mocha Coffee Premix (5 Sachets) (₹381.00), Sunfeast Dark Fantasy Yumfills Choco Pie (₹303.00), Nutralite Crunchy Choco Spread With Quinoa (₹238.00), Oreo Choco Vanilla Dutch Cocoa Wafer Bar (₹4,938.00)]
+2026-02-13 03:38:20.952 | BlinkItAgent | REASON | Evaluating 10 product options via LLM | options=[Nescafe Choco Mocha Cold Coffee (₹397.00), Nescafe Gold Choco Mocha Coffee Premix (5 Sachets) (₹381.00), Sunfeast Dark Fantasy Yumfills Choco Pie (₹303.00), Nutralite Crunchy Choco Spread With Quinoa (₹238.00), Oreo Choco Vanilla Dutch Cocoa Wafer Bar (₹4,938.00)]
+2026-02-13 03:38:20.953 | IntentDetector | REASON | Evaluating 10 food options for 'chocolate' | budget=₹500
+2026-02-13 03:38:22.494 | IntentDetector | DECIDE | Picked 'Sunfeast Dark Fantasy Yumfills Choco Pie' (index 2) | reason=The Sunfeast Dark Fantasy Yumfills Choco Pie is directly related to chocolate, is well within the budget, and offers a good balance of price and quantity, making it a reasonable choice.
+2026-02-13 03:38:22.494 | BlinkItAgent | DECIDE | Selected 'Sunfeast Dark Fantasy Yumfills Choco Pie' at ₹303.00 | reason=The Sunfeast Dark Fantasy Yumfills Choco Pie is directly related to chocolate, is well within the budget, and offers a good balance of price and quantity, making it a reasonable choice.
+2026-02-13 03:38:22.497 | BlinkItAgent | OBSERVE | Scanning product grid for card matching 'Sunfeast Dark Fantasy Yumfills Choco Pie' | each card has image, name, price, green 'Add' button
+2026-02-13 03:38:24.004 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:38:24.004 | WhatsAppAgent | TYPE | Typed message into input field | text="Always here for you, meri jaan. Tum sabse special ho mere liye! 😘"
+2026-02-13 03:38:24.004 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:38:24.004 | WhatsAppAgent | SEND | Message sent to Ananya | content="Always here for you, meri jaan. Tum sabse special ho mere liye! 😘"
+2026-02-13 03:38:34.147 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Well then tonight at 9 , lets go to the steak house"
+2026-02-13 03:38:34.150 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:38:34.150 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="Well then tonight at 9 , lets go to the steak house"
+2026-02-13 03:38:37.804 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Perfect, 9 baje ready rehna! Can't wait to see you, meri jaan. 😊"
+2026-02-13 03:38:37.805 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=64
+2026-02-13 03:38:37.807 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:38:44.916 | BlinkItAgent | OBSERVE | Found product card for 'Sunfeast Dark Fantasy Yumfills Choco Pie' in grid
+2026-02-13 03:38:44.916 | BlinkItAgent | CLICK | Clicked green 'Add' button on 'Sunfeast Dark Fantasy Yumfills Choco Pie' card
+2026-02-13 03:38:44.916 | BlinkItAgent | OBSERVE | Add button changed to quantity controls (- 1 +), item added to cart
+2026-02-13 03:38:44.919 | BlinkItAgent | WAIT | Waiting 2s for cart state to update
+2026-02-13 03:38:46.921 | BlinkItAgent | OBSERVE | Looking for green cart button in top-right header | shows item count and total price
+2026-02-13 03:39:02.116 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:39:02.117 | WhatsAppAgent | TYPE | Typed message into input field | text="Perfect, 9 baje ready rehna! Can't wait to see you, meri jaan. 😊"
+2026-02-13 03:39:02.117 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:39:02.117 | WhatsAppAgent | SEND | Message sent to Ananya | content="Perfect, 9 baje ready rehna! Can't wait to see you, meri jaan. 😊"
+2026-02-13 03:39:12.256 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Should I pick you up , or you would be by your car?"
+2026-02-13 03:39:12.260 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:39:12.261 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="Should I pick you up , or you would be by your car?"
+2026-02-13 03:39:14.570 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Main apni car se aata hoon, no worries. Tum bas ready rehna, my girl! 😊"
+2026-02-13 03:39:14.570 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=71
+2026-02-13 03:39:14.573 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:39:18.496 | BlinkItAgent | CLICK | Clicked green cart button in header to open cart sidebar
+2026-02-13 03:39:18.496 | BlinkItAgent | OBSERVE | Cart sidebar opened, showing items and bill summary
+2026-02-13 03:39:18.496 | BlinkItAgent | CLICK | Clicked green 'Proceed' button at bottom of cart sidebar
+2026-02-13 03:39:18.496 | BlinkItAgent | NAVIGATE | Navigated to checkout page at /checkout
+2026-02-13 03:39:20.497 | BlinkItAgent | OBSERVE | On checkout page, checking delivery address section on left | looking for pre-selected radio button
+2026-02-13 03:39:37.226 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:39:37.226 | WhatsAppAgent | TYPE | Typed message into input field | text="Main apni car se aata hoon, no worries. Tum bas ready rehna, my girl! 😊"
+2026-02-13 03:39:37.226 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:39:37.226 | WhatsAppAgent | SEND | Message sent to Ananya | content="Main apni car se aata hoon, no worries. Tum bas ready rehna, my girl! 😊"
+2026-02-13 03:39:46.834 | BlinkItAgent | OBSERVE | Delivery address confirmed (pre-selected or first option chosen)
+2026-02-13 03:39:46.835 | BlinkItAgent | OBSERVE | Found payment options: 'Online Payment' and 'Cash on Delivery'
+2026-02-13 03:39:46.835 | BlinkItAgent | CLICK | Clicked 'Cash on Delivery' button to place order
+2026-02-13 03:39:46.835 | BlinkItAgent | WAIT | Waiting for order confirmation page
+2026-02-13 03:39:46.835 | BlinkItAgent | SUBMIT | Order placed via Cash on Delivery
+2026-02-13 03:39:46.838 | BlinkItAgent | EVENT | Order placed successfully for 'Sunfeast Dark Fantasy Yumfills Choco Pie' | original_request='chocolate', price=₹303.00
+[run:c3ad29ba] 2026-02-13 03:39:46.838 | Orchestrator | EVENT | Order completed successfully for 'chocolate' | chosen_product=Sunfeast Dark Fantasy Yumfills Choco Pie
+2026-02-13 03:39:46.840 | WhatsAppAgent | EVENT | Order completed for 'chocolate', queued confirmation message
+2026-02-13 03:39:47.307 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:40:09.083 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:40:09.084 | WhatsAppAgent | TYPE | Typed message into input field | text="done meri jaan, chocolate aa raha hai tere liye"
+2026-02-13 03:40:09.084 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:40:09.084 | WhatsAppAgent | SEND | Message sent to Ananya | content="done meri jaan, chocolate aa raha hai tere liye"
+2026-02-13 03:40:09.154 | WhatsAppAgent | RECEIVE | New message from Ananya | content="ok , Should we invite Naman ?"
+2026-02-13 03:40:09.165 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:40:09.165 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="ok , Should we invite Naman ?"
+2026-02-13 03:40:10.521 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Arey nahin, aaj bas hum dono ka time hai. Let's keep it just us, meri jaan. 😊"
+2026-02-13 03:40:10.521 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=77
+2026-02-13 03:40:10.524 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:40:32.386 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:40:32.386 | WhatsAppAgent | TYPE | Typed message into input field | text="Arey nahin, aaj bas hum dono ka time hai. Let's keep it just us, meri jaan. 😊"
+2026-02-13 03:40:32.386 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:40:32.386 | WhatsAppAgent | SEND | Message sent to Ananya | content="Arey nahin, aaj bas hum dono ka time hai. Let's keep it just us, meri jaan. 😊"
+2026-02-13 03:40:37.457 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Aww , you ordered for me ? But I am asking should we invite naman ?"
+2026-02-13 03:40:37.461 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:40:37.461 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="Aww , you ordered for me ? But I am asking should we invite naman ?"
+2026-02-13 03:40:40.195 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Haan, chocolate tumhare liye order kiya. Aur Naman ko next time bula lenge, aaj "
+2026-02-13 03:40:40.195 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=98
+2026-02-13 03:40:40.197 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:41:03.715 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:41:03.716 | WhatsAppAgent | TYPE | Typed message into input field | text="Haan, chocolate tumhare liye order kiya. Aur Naman ko next time bula lenge, aaj humara time hai. 😘"
+2026-02-13 03:41:03.716 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:41:03.716 | WhatsAppAgent | SEND | Message sent to Ananya | content="Haan, chocolate tumhare liye order kiya. Aur Naman ko next time bula lenge, aaj humara time hai. 😘"
+2026-02-13 03:41:08.788 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Ok , why don't you call me after meet . Bye"
+2026-02-13 03:41:08.788 | WhatsAppAgent | RECEIVE | New message from Ananya | content="Bye"
+2026-02-13 03:41:08.795 | WhatsAppAgent | REASON | Analyzing conversation for intent detection | context_messages=20
+2026-02-13 03:41:08.795 | IntentDetector | REASON | Analyzing 20 messages for intent | last_message="Bye"
+2026-02-13 03:41:09.815 | IntentDetector | DECIDE | Classified intent as 'normal_chat' | confidence=1.0, reply="Bye meri jaan, meet khatam hote hi call karunga! 😘"
+2026-02-13 03:41:09.816 | WhatsAppAgent | DECIDE | Intent: 'normal_chat' | confidence=1.0, item=None, reply_length=50
+2026-02-13 03:41:09.818 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:41:31.221 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:41:31.222 | WhatsAppAgent | TYPE | Typed message into input field | text="Bye meri jaan, meet khatam hote hi call karunga! 😘"
+2026-02-13 03:41:31.222 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:41:31.222 | WhatsAppAgent | SEND | Message sent to Ananya | content="Bye meri jaan, meet khatam hote hi call karunga! 😘"
+2026-02-13 03:42:01.626 | WhatsAppAgent | REASON | Idle for 30s, switching to reply to another contact
+2026-02-13 03:42:01.627 | WhatsAppAgent | NAVIGATE | Switching to contact 'Arjun Mehta' for idle-time reply
+2026-02-13 03:42:01.627 | WhatsAppAgent | OBSERVE | Scanning contacts sidebar for 'Arjun Mehta'
+2026-02-13 03:42:30.455 | WhatsAppAgent | CLICK | Clicked on 'Arjun Mehta' in contacts sidebar
+2026-02-13 03:42:30.455 | WhatsAppAgent | WAIT | Waiting for Arjun Mehta's chat to load
+2026-02-13 03:42:31.457 | WhatsAppAgent | EXTRACT | Fetching last 5 messages for 'Arjun Mehta' from Supabase
+2026-02-13 03:42:31.524 | WhatsAppAgent | REASON | Generating casual reply for 'Arjun Mehta' via LLM | context_messages=5
+2026-02-13 03:42:31.525 | IntentDetector | REASON | Generating casual reply for contact 'Arjun Mehta' | context_messages=5
+2026-02-13 03:42:32.713 | IntentDetector | DECIDE | Generated generic reply for 'Arjun Mehta' | reply="Haan bro, match dekhne ka scene banao. Kahan milna hai?"
+2026-02-13 03:42:32.713 | WhatsAppAgent | DECIDE | Generated reply for 'Arjun Mehta' | reply="Haan bro, match dekhne ka scene banao. Kahan milna hai?"
+2026-02-13 03:42:32.714 | WhatsAppAgent | OBSERVE | Looking for message input field at bottom of chat area
+2026-02-13 03:42:56.724 | WhatsAppAgent | CLICK | Clicked on message input field to focus it
+2026-02-13 03:42:56.725 | WhatsAppAgent | TYPE | Typed message into input field | text="Haan bro, match dekhne ka scene banao. Kahan milna hai?"
+2026-02-13 03:42:56.725 | WhatsAppAgent | SUBMIT | Pressed Enter to send the message
+2026-02-13 03:42:56.725 | WhatsAppAgent | SEND | Message sent to Ananya | content="Haan bro, match dekhne ka scene banao. Kahan milna hai?"
+2026-02-13 03:42:56.727 | WhatsAppAgent | NAVIGATE | Navigating back to Ananya's chat
+2026-02-13 03:42:56.727 | WhatsAppAgent | OBSERVE | Scanning contacts sidebar for 'Ananya'

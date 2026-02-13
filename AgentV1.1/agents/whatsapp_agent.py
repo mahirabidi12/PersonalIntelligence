@@ -11,6 +11,7 @@ from agents.base_agent import BaseAgent
 from config import config
 from core.intent import IntentDetector
 from core.memory import Memory
+from core.step_logger import log_step, StepType
 from events.bus import EventBus
 from models.schemas import ChatMessage
 
@@ -35,6 +36,11 @@ class WhatsAppAgent(BaseAgent):
         self._ordering = False
         self._pending_notifications: list[str] = []
 
+        # Idle-time one-shot replies to other contacts (only if instruction says so)
+        self._idle_seconds: int = 0
+        self._handled_contacts: set[str] = set()
+        self._reply_other_chats: bool = self._should_reply_other_chats()
+
         # Supabase client for direct DB access
         self.supabase = create_client(config.SUPABASE_URL, config.SUPABASE_ANON_KEY)
 
@@ -53,9 +59,9 @@ class WhatsAppAgent(BaseAgent):
         """Queue a confirmation message to send in WhatsApp."""
         self._ordering = False
         item = payload.get("item", "your order")
-        self._pending_notifications.append(
-            f"ordered it baby! your {item} is on its way 🎉"
-        )
+        msg = f"done meri jaan, {item} aa raha hai tere liye"
+        self._pending_notifications.append(msg)
+        await log_step("WhatsAppAgent", StepType.EVENT, f"Order completed for '{item}', queued confirmation message")
         logger.info(f"[WhatsAppAgent] Queued order completion notification for: {item}")
 
     async def _on_order_failed(self, payload: dict):
@@ -64,13 +70,17 @@ class WhatsAppAgent(BaseAgent):
         item = payload.get("item", "that")
         error = payload.get("error", "something went wrong")
         self._pending_notifications.append(
-            f"sorry babe, couldn't order {item} right now 😔 {error}"
+            f"ummm {item} nahi mil raha abhi, baad mein try karta hoon"
         )
+        await log_step("WhatsAppAgent", StepType.EVENT, f"Order failed for '{item}', queued failure notification", f"error={error}")
         logger.info(f"[WhatsAppAgent] Queued order failure notification for: {item}")
 
     async def setup(self):
         """Navigate to WhatsApp, login as agent user, open target contact chat."""
         self.set_status("running", "Setting up WhatsApp")
+
+        await log_step("WhatsAppAgent", StepType.NAVIGATE, f"Opening WhatsApp at {config.WHATSAPP_URL}")
+        await log_step("WhatsAppAgent", StepType.OBSERVE, "Looking for 'Pick a User' screen with radio buttons")
 
         # Browser setup: navigate, select user, and open target contact (visual only)
         setup_agent = Agent(
@@ -85,6 +95,11 @@ class WhatsAppAgent(BaseAgent):
             use_judge=False,
         )
         await setup_agent.run()
+
+        await log_step("WhatsAppAgent", StepType.CLICK, f"Selected user '{config.WHATSAPP_AGENT_USER}' from radio buttons")
+        await log_step("WhatsAppAgent", StepType.CLICK, "Clicked 'Enter Chat' button to login")
+        await log_step("WhatsAppAgent", StepType.OBSERVE, f"Scanning contacts list on left sidebar for '{config.WHATSAPP_TARGET_CONTACT}'")
+        await log_step("WhatsAppAgent", StepType.CLICK, f"Clicked on contact '{config.WHATSAPP_TARGET_CONTACT}' to open chat")
         await self.log("setup", f"Navigated to WhatsApp and opened chat with {config.WHATSAPP_TARGET_CONTACT}")
 
         # Load last 5 messages into memory for context, and reply if latest is from Ananya
@@ -96,6 +111,8 @@ class WhatsAppAgent(BaseAgent):
 
     async def _bootstrap_conversation(self):
         """Load last 5 messages into memory. If the latest is from the target, reply immediately."""
+        await log_step("WhatsAppAgent", StepType.EXTRACT, "Fetching last 5 messages from Supabase for conversation context")
+
         result = (
             self.supabase.table("chats")
             .select("sender_id, content, created_at")
@@ -107,6 +124,7 @@ class WhatsAppAgent(BaseAgent):
 
         if not result.data:
             self._last_seen_ts = None
+            await log_step("WhatsAppAgent", StepType.OBSERVE, "No existing messages found in conversation")
             logger.info("[WhatsAppAgent] No existing messages in conversation")
             return
 
@@ -126,16 +144,21 @@ class WhatsAppAgent(BaseAgent):
 
         # Set last_seen_ts to the latest message timestamp
         self._last_seen_ts = messages[-1]["created_at"]
+        await log_step("WhatsAppAgent", StepType.EXTRACT, f"Loaded {len(messages)} messages into memory for context")
         logger.info(f"[WhatsAppAgent] Loaded {len(messages)} messages into memory")
         logger.info(f"[WhatsAppAgent] Last message timestamp: {self._last_seen_ts}")
 
         # If the latest message is from the target contact, reply now
         latest = messages[-1]
         if latest["sender_id"] == config.WHATSAPP_TARGET_ID:
+            await log_step("WhatsAppAgent", StepType.RECEIVE, f"Latest message is from {config.WHATSAPP_TARGET_CONTACT}", f"content=\"{latest['content']}\"")
             logger.info(f"[WhatsAppAgent] Latest message is from {config.WHATSAPP_TARGET_CONTACT}: \"{latest['content']}\" — replying immediately")
 
             recent = await self.memory.get_recent_messages(limit=20)
+            await log_step("WhatsAppAgent", StepType.REASON, "Sending conversation to LLM for intent detection")
             intent_result = await self.intent_detector.detect(recent)
+
+            await log_step("WhatsAppAgent", StepType.DECIDE, f"Intent classified as '{intent_result.intent}'", f"confidence={intent_result.confidence}, item={intent_result.item}")
 
             await self.log(
                 "intent_detected",
@@ -150,15 +173,18 @@ class WhatsAppAgent(BaseAgent):
 
             if intent_result.intent == "order_food" and intent_result.item and not self._ordering:
                 self._ordering = True
+                await log_step("WhatsAppAgent", StepType.EVENT, f"Food craving detected, triggering order for '{intent_result.item}'")
                 await self.event_bus.publish("ORDER_REQUESTED", {"item": intent_result.item})
                 logger.info(f"[WhatsAppAgent] Published ORDER_REQUESTED for: {intent_result.item}")
         else:
+            await log_step("WhatsAppAgent", StepType.OBSERVE, f"Latest message is from us, waiting for {config.WHATSAPP_TARGET_CONTACT} to reply")
             logger.info(f"[WhatsAppAgent] Latest message is from us — waiting for {config.WHATSAPP_TARGET_CONTACT}")
 
     async def run(self):
         """Main polling loop: check Supabase for new messages, detect intent, reply."""
         self._running = True
         self.set_status("running", "Polling for messages via Supabase")
+        await log_step("WhatsAppAgent", StepType.EVENT, f"Starting message polling loop", f"interval={config.POLL_INTERVAL}s")
 
         while self._running:
             try:
@@ -169,6 +195,9 @@ class WhatsAppAgent(BaseAgent):
                 new_messages = await self._check_for_new_messages()
 
                 if new_messages:
+                    self._idle_seconds = 0  # GF messaged, reset idle timer
+                    for msg_text in new_messages:
+                        await log_step("WhatsAppAgent", StepType.RECEIVE, f"New message from {config.WHATSAPP_TARGET_CONTACT}", f"content=\"{msg_text}\"")
                     logger.info(f"[WhatsAppAgent] Found {len(new_messages)} new message(s) from {config.WHATSAPP_TARGET_CONTACT}")
 
                     # Save new messages to memory
@@ -177,7 +206,10 @@ class WhatsAppAgent(BaseAgent):
 
                     # Get full conversation context and detect intent
                     recent = await self.memory.get_recent_messages(limit=20)
+                    await log_step("WhatsAppAgent", StepType.REASON, "Analyzing conversation for intent detection", f"context_messages={len(recent)}")
                     intent_result = await self.intent_detector.detect(recent)
+
+                    await log_step("WhatsAppAgent", StepType.DECIDE, f"Intent: '{intent_result.intent}'", f"confidence={intent_result.confidence}, item={intent_result.item}, reply_length={len(intent_result.reply or '')}")
 
                     await self.log(
                         "intent_detected",
@@ -194,10 +226,22 @@ class WhatsAppAgent(BaseAgent):
                     # If food intent and no order already running, publish order event
                     if intent_result.intent == "order_food" and intent_result.item and not self._ordering:
                         self._ordering = True
+                        await log_step("WhatsAppAgent", StepType.EVENT, f"Food craving detected, publishing ORDER_REQUESTED", f"item='{intent_result.item}'")
                         await self.event_bus.publish("ORDER_REQUESTED", {"item": intent_result.item})
                         logger.info(f"[WhatsAppAgent] Published ORDER_REQUESTED for: {intent_result.item}")
+                else:
+                    # GF is quiet — track idle time and reply to other contacts if enabled
+                    if self._reply_other_chats:
+                        self._idle_seconds += config.POLL_INTERVAL
+
+                        # After 30s idle, reply to one other contact (one-shot)
+                        if self._idle_seconds >= 30:
+                            await log_step("WhatsAppAgent", StepType.REASON, f"Idle for {self._idle_seconds}s, switching to reply to another contact")
+                            await self._reply_to_next_contact()
+                            self._idle_seconds = 0
 
             except Exception as e:
+                await log_step("WhatsAppAgent", StepType.EVENT, f"Error in polling loop", f"error={str(e)}")
                 logger.error(f"[WhatsAppAgent] Error in polling loop: {e}")
                 await self.log("error", str(e), status="error")
 
@@ -237,6 +281,7 @@ class WhatsAppAgent(BaseAgent):
     async def _send_message(self, text: str):
         """Type and send message via the browser UI so the user can watch it happen."""
         try:
+            await log_step("WhatsAppAgent", StepType.OBSERVE, "Looking for message input field at bottom of chat area")
             send_agent = Agent(
                 task=f"""
                 In the chat area, find the message input field (usually at the bottom of the chat).
@@ -249,9 +294,14 @@ class WhatsAppAgent(BaseAgent):
                 use_judge=False,
             )
             await send_agent.run()
+            await log_step("WhatsAppAgent", StepType.CLICK, "Clicked on message input field to focus it")
+            await log_step("WhatsAppAgent", StepType.TYPE, f"Typed message into input field", f"text=\"{text}\"")
+            await log_step("WhatsAppAgent", StepType.SUBMIT, "Pressed Enter to send the message")
+            await log_step("WhatsAppAgent", StepType.SEND, f"Message sent to {config.WHATSAPP_TARGET_CONTACT}", f"content=\"{text}\"")
             logger.info(f"[WhatsAppAgent] Sent via UI: {text}")
             await self.log("send_message", text)
         except Exception as e:
+            await log_step("WhatsAppAgent", StepType.EVENT, f"Failed to send message via browser UI", f"error={str(e)}")
             logger.error(f"[WhatsAppAgent] Failed to send message: {e}")
 
     async def _send_pending_notifications(self):
@@ -260,6 +310,126 @@ class WhatsAppAgent(BaseAgent):
             msg = self._pending_notifications.pop(0)
             await self._send_message(msg)
             await self.memory.save_message("agent", msg, config.WHATSAPP_AGENT_USER)
+
+    @staticmethod
+    def _should_reply_other_chats() -> bool:
+        """Check if INITIAL_INSTRUCTION mentions replying to other chats."""
+        instruction = config.INITIAL_INSTRUCTION.lower()
+        keywords = ["other chat", "all chat", "other contact", "all contact",
+                     "keep chats updated", "reply to others", "reply others",
+                     "other conversations", "all conversations"]
+        match = any(kw in instruction for kw in keywords)
+        if match:
+            logger.info("[WhatsAppAgent] Instruction includes other-chats — multi-contact replies ENABLED")
+        else:
+            logger.info("[WhatsAppAgent] Instruction is GF-only — multi-contact replies DISABLED")
+        return match
+
+    def _get_conversation_id(self, contact_id: str) -> str:
+        """Generate conversation_id for a contact (same logic as frontend)."""
+        ids = sorted([config.WHATSAPP_USER_ID, contact_id])
+        return f"{ids[0]}-{ids[1]}-chat"
+
+    async def _reply_to_next_contact(self):
+        """Pick the next un-handled contact, read last 5 msgs via API, then
+        navigate to their chat in the browser, type & send the reply, and
+        navigate back to Ananya's chat."""
+        for contact_id, contact_name in config.CONTACTS.items():
+            if contact_id in self._handled_contacts:
+                continue
+
+            conv_id = self._get_conversation_id(contact_id)
+
+            await log_step("WhatsAppAgent", StepType.NAVIGATE, f"Switching to contact '{contact_name}' for idle-time reply")
+
+            # Step 1: Navigate to this contact's chat first
+            await self._navigate_to_contact(contact_name)
+
+            # Step 2: Read last 5 messages from Supabase API
+            await log_step("WhatsAppAgent", StepType.EXTRACT, f"Fetching last 5 messages for '{contact_name}' from Supabase")
+            try:
+                result = (
+                    self.supabase.table("chats")
+                    .select("sender_id, content, created_at")
+                    .eq("conversation_id", conv_id)
+                    .order("created_at", desc=True)
+                    .limit(5)
+                    .execute()
+                )
+            except Exception as e:
+                await log_step("WhatsAppAgent", StepType.EVENT, f"Failed to fetch messages for '{contact_name}'", f"error={str(e)}")
+                logger.error(f"[WhatsAppAgent] Failed to fetch messages for {contact_name}: {e}")
+                self._handled_contacts.add(contact_id)
+                await self._navigate_to_contact(config.WHATSAPP_TARGET_CONTACT)
+                continue
+
+            if not result.data:
+                await log_step("WhatsAppAgent", StepType.OBSERVE, f"No messages found with '{contact_name}', skipping")
+                self._handled_contacts.add(contact_id)
+                logger.info(f"[WhatsAppAgent] No messages with {contact_name}, skipping")
+                await self._navigate_to_contact(config.WHATSAPP_TARGET_CONTACT)
+                continue
+
+            messages = list(reversed(result.data))
+
+            # If last message is from us, no reply needed
+            if messages[-1]["sender_id"] == config.WHATSAPP_USER_ID:
+                await log_step("WhatsAppAgent", StepType.OBSERVE, f"Last message to '{contact_name}' is from us, no reply needed")
+                self._handled_contacts.add(contact_id)
+                logger.info(f"[WhatsAppAgent] Last msg to {contact_name} is from us, skipping")
+                await self._navigate_to_contact(config.WHATSAPP_TARGET_CONTACT)
+                continue
+
+            # Add sender names for LLM context
+            for msg in messages:
+                if msg["sender_id"] == config.WHATSAPP_USER_ID:
+                    msg["sender_name"] = config.WHATSAPP_AGENT_USER
+                else:
+                    msg["sender_name"] = contact_name
+
+            # Step 3: Generate reply text via LLM
+            await log_step("WhatsAppAgent", StepType.REASON, f"Generating casual reply for '{contact_name}' via LLM", f"context_messages={len(messages)}")
+            reply = await self.intent_detector.generate_generic_reply(messages, contact_name)
+            reply = reply.replace("\n", " ").strip()
+            await log_step("WhatsAppAgent", StepType.DECIDE, f"Generated reply for '{contact_name}'", f"reply=\"{reply}\"")
+
+            # Step 4: Type and send via browser UI
+            await self._send_message(reply)
+
+            # Step 5: Navigate back to Ananya's chat
+            await log_step("WhatsAppAgent", StepType.NAVIGATE, f"Navigating back to {config.WHATSAPP_TARGET_CONTACT}'s chat")
+            await self._navigate_to_contact(config.WHATSAPP_TARGET_CONTACT)
+
+            self._handled_contacts.add(contact_id)
+            await self.log("one_shot_reply", contact_name, reply)
+            logger.info(f"[WhatsAppAgent] One-shot reply to {contact_name}: {reply}")
+            return  # Only one contact per idle cycle
+
+        # If we get here, all contacts are handled
+        logger.debug("[WhatsAppAgent] All contacts replied to, back to Ananya-only mode")
+
+    async def _navigate_to_contact(self, contact_name: str):
+        """Click on a contact in the sidebar to open their chat."""
+        try:
+            await log_step("WhatsAppAgent", StepType.OBSERVE, f"Scanning contacts sidebar for '{contact_name}'")
+            nav_agent = Agent(
+                task=f"""
+                Look at the contacts list on the left side of the page.
+                Find the contact named "{contact_name}" and click on it to open their chat.
+                Wait for the chat to load.
+                """,
+                llm=self.llm,
+                browser_session=self.browser_session,
+                use_judge=False,
+            )
+            await nav_agent.run()
+            await log_step("WhatsAppAgent", StepType.CLICK, f"Clicked on '{contact_name}' in contacts sidebar")
+            await log_step("WhatsAppAgent", StepType.WAIT, f"Waiting for {contact_name}'s chat to load")
+            logger.info(f"[WhatsAppAgent] Navigated to {contact_name}'s chat")
+            await asyncio.sleep(1)
+        except Exception as e:
+            await log_step("WhatsAppAgent", StepType.EVENT, f"Failed to navigate to '{contact_name}'", f"error={str(e)}")
+            logger.error(f"[WhatsAppAgent] Failed to navigate to {contact_name}: {e}")
 
     async def teardown(self):
         """Stop the polling loop."""

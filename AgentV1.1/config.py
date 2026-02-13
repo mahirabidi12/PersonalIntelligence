@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -40,6 +40,19 @@ class Config:
     SUPERMEMORY_PATH: str = os.getenv(
         "SUPERMEMORY_PATH", os.path.join(os.path.dirname(__file__), "supermemory.md")
     )
+
+    # Other contacts (non-GF) — agent sends one-shot replies during idle time
+    CONTACTS: dict = field(default_factory=lambda: {
+        "user3": "Arjun Mehta",
+        "user4": "Priya Sharma",
+        "user5": "Vikram Patel",
+        "user6": "Neha Gupta",
+        "user7": "Amit Kumar",
+        "user8": "Rohan Singh",
+        "user9": "Kavita Reddy",
+        "user10": "Dev Team",
+        "user11": "Sanjay Iyer",
+    })
 
     # Initial instruction — what the user tells the agent before leaving
     INITIAL_INSTRUCTION: str = os.getenv(

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 
 from browser_use import BrowserSession
 
@@ -8,6 +9,7 @@ from agents.whatsapp_agent import WhatsAppAgent
 from config import config
 from core.intent import IntentDetector
 from core.memory import Memory
+from core.step_logger import log_step, log_session_start, log_session_end, StepType
 from core.supermemory import SuperMemory
 from events.bus import EventBus
 
@@ -36,9 +38,14 @@ class Orchestrator:
         self.ordering_in_progress = False
         self._order_queue: list[str] = []
 
+        # Unique run ID for grouping step logs per session
+        self.run_id = uuid.uuid4().hex[:8]
+
     async def start(self):
         """Initialize everything and start the WhatsApp agent."""
         logger.info("=== Orchestrator starting ===")
+        await log_session_start(self.run_id)
+        await log_step("Orchestrator", StepType.EVENT, "Session starting", f"run_id={self.run_id}", self.run_id)
 
         # 1. Init memory
         await self.memory.init_db()
@@ -72,6 +79,7 @@ class Orchestrator:
         self._whatsapp_task = asyncio.create_task(self.whatsapp_agent.run())
         self._running = True
 
+        await log_step("Orchestrator", StepType.EVENT, "All agents initialized and running", f"whatsapp_target={config.WHATSAPP_TARGET_CONTACT}", self.run_id)
         logger.info("=== Orchestrator running ===")
         logger.info(f"WhatsApp agent: chatting as {config.WHATSAPP_AGENT_USER} with {config.WHATSAPP_TARGET_CONTACT}")
         logger.info(f"WhatsApp URL: {config.WHATSAPP_URL}")
@@ -86,6 +94,7 @@ class Orchestrator:
 
         if self.ordering_in_progress:
             self._order_queue.append(item)
+            await log_step("Orchestrator", StepType.EVENT, f"Order already in progress, queued '{item}'", f"queue_size={len(self._order_queue)}", self.run_id)
             logger.info(f"Order in progress, queued '{item}' (queue size: {len(self._order_queue)})")
             await self.memory.log_action("Orchestrator", "order_queued", item)
             return
@@ -95,6 +104,7 @@ class Orchestrator:
     async def _start_order(self, item: str):
         """Launch a BlinkIt order for the given item."""
         self.ordering_in_progress = True
+        await log_step("Orchestrator", StepType.EVENT, f"Spawning BlinkItAgent to order '{item}'", "opening separate browser session", self.run_id)
         logger.info(f"=== Order requested: {item} ===")
         await self.memory.log_action("Orchestrator", "order_requested", item)
 
@@ -144,6 +154,8 @@ class Orchestrator:
     async def _handle_order_complete(self, payload: dict):
         """Log order completion."""
         item = payload.get("item", "")
+        chosen = payload.get("chosen", item)
+        await log_step("Orchestrator", StepType.EVENT, f"Order completed successfully for '{item}'", f"chosen_product={chosen}", self.run_id)
         logger.info(f"=== Order completed: {item} ===")
         await self.memory.log_action("Orchestrator", "order_completed", item)
 
@@ -151,6 +163,7 @@ class Orchestrator:
         """Log order failure."""
         item = payload.get("item", "")
         error = payload.get("error", "unknown")
+        await log_step("Orchestrator", StepType.EVENT, f"Order FAILED for '{item}'", f"error={error}", self.run_id)
         logger.error(f"=== Order failed: {item} | {error} ===")
         await self.memory.log_action("Orchestrator", "order_failed", f"{item}: {error}", status="error")
 
@@ -185,6 +198,8 @@ class Orchestrator:
         if self.browser_session:
             await self.browser_session.kill()
 
+        await log_step("Orchestrator", StepType.EVENT, "Session stopped gracefully", run_id=self.run_id)
+        await log_session_end(self.run_id)
         logger.info("=== Orchestrator stopped ===")
 
     def get_status(self) -> dict:
