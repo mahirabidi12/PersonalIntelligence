@@ -91,3 +91,6 @@ BlinkIt/server/.env
 # WhatsApp specific
 Whatsapp/.next/
 Whatsapp/out/
+
+Whatsapp/supabase.sql
+Whatsapp/seed-messages.sql
